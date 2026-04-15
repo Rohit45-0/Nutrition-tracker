@@ -1,18 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Anek_Latin, Fraunces } from "next/font/google";
 import "./globals.css";
-
-const anek = Anek_Latin({
-  subsets: ["latin"],
-  variable: "--font-anek",
-  display: "swap",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "NutriTrack - Indian Diet Tracker",
@@ -38,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${anek.variable} ${fraunces.variable}`}>
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

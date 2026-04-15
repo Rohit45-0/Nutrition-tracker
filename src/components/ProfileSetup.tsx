@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { UserProfile, Goal, ActivityLevel } from '@/lib/types';
-import { saveProfile } from '@/lib/storage';
 import { calculateDailyTargets } from '@/lib/nutrition';
 
 interface Props {
-    onComplete: (profile: UserProfile) => void;
+    onComplete: (profile: UserProfile) => Promise<void> | void;
     existingProfile?: UserProfile | null;
+    accountName?: string;
 }
 
 const goals: { value: Goal; label: string; desc: string; marker: string }[] = [
@@ -24,17 +24,19 @@ const activityLevels: { value: ActivityLevel; label: string; desc: string }[] = 
     { value: 'very_active', label: 'Athlete', desc: 'Hard daily training or physical work.' },
 ];
 
-export default function ProfileSetup({ onComplete, existingProfile }: Props) {
+export default function ProfileSetup({ onComplete, existingProfile, accountName }: Props) {
     const [step, setStep] = useState(0);
-    const [name, setName] = useState(existingProfile?.name || '');
+    const [name, setName] = useState(existingProfile?.name || accountName || '');
     const [weight, setWeight] = useState(existingProfile?.weight || 70);
     const [height, setHeight] = useState(existingProfile?.height || 170);
     const [age, setAge] = useState(existingProfile?.age || 25);
     const [gender, setGender] = useState<'male' | 'female'>(existingProfile?.gender || 'male');
     const [goal, setGoal] = useState<Goal>(existingProfile?.goal || 'muscle_building');
     const [activityLevel, setActivityLevel] = useState<ActivityLevel>(existingProfile?.activityLevel || 'moderate');
+    const [isSaving, setIsSaving] = useState(false);
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
+        setIsSaving(true);
         const profile: UserProfile = {
             name: name.trim() || 'User',
             weight,
@@ -45,13 +47,16 @@ export default function ProfileSetup({ onComplete, existingProfile }: Props) {
             activityLevel,
             createdAt: existingProfile?.createdAt || new Date().toISOString(),
         };
-        saveProfile(profile);
-        onComplete(profile);
+        try {
+            await onComplete(profile);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const nextStep = () => {
         if (step < 3) setStep(step + 1);
-        else handleSubmit();
+        else void handleSubmit();
     };
 
     const prevStep = () => {
@@ -229,8 +234,9 @@ export default function ProfileSetup({ onComplete, existingProfile }: Props) {
                         type="button"
                         onClick={nextStep}
                         className="primary-button tap-scale"
+                        disabled={isSaving}
                     >
-                        {step === 3 ? 'Start tracking' : 'Continue'}
+                        {isSaving ? 'Saving...' : step === 3 ? 'Start tracking' : 'Continue'}
                     </button>
                 </footer>
             </div>

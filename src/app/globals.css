@@ -24,8 +24,8 @@
   --color-success: #138a5b;
   --color-danger: #c83224;
   --color-warning: #aa7400;
-  --font-sans: var(--font-anek), "Trebuchet MS", sans-serif;
-  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-display: "Iowan Old Style", Georgia, "Times New Roman", serif;
 }
 
 * {

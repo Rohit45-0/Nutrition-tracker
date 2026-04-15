@@ -5,12 +5,14 @@ import { getGoalLabel } from '@/lib/nutrition';
 
 interface Props {
     profile: UserProfile;
+    userEmail: string;
     targets: DailyTargets;
     onEditProfile: () => void;
+    onSignOut: () => Promise<void> | void;
     totalDays: number;
 }
 
-export default function Settings({ profile, targets, onEditProfile, totalDays }: Props) {
+export default function Settings({ profile, userEmail, targets, onEditProfile, onSignOut, totalDays }: Props) {
     const initials = profile.name
         .split(' ')
         .map((part) => part[0])
@@ -34,6 +36,7 @@ export default function Settings({ profile, targets, onEditProfile, totalDays }:
                     <div className="min-w-0">
                         <h2 className="truncate text-2xl font-black text-ink">{profile.name}</h2>
                         <p className="text-sm font-bold text-muted">{getGoalLabel(profile.goal)}</p>
+                        <p className="truncate text-xs font-bold text-faint">{userEmail}</p>
                     </div>
                 </div>
 
@@ -50,6 +53,13 @@ export default function Settings({ profile, targets, onEditProfile, totalDays }:
                     className="secondary-button tap-scale mt-4 w-full"
                 >
                     Edit profile
+                </button>
+                <button
+                    type="button"
+                    onClick={onSignOut}
+                    className="tap-scale mt-3 w-full rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink-soft"
+                >
+                    Sign out
                 </button>
             </section>
 

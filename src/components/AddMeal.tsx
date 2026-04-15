@@ -5,7 +5,7 @@ import { MealType, MealEntry, FoodItem, NutritionInfo } from '@/lib/types';
 import { getMealEmoji, getMealLabel, sumNutrition } from '@/lib/nutrition';
 
 interface Props {
-    onSave: (meal: MealEntry) => void;
+    onSave: (meal: MealEntry) => Promise<void> | void;
     onClose: () => void;
 }
 
@@ -61,6 +61,7 @@ export default function AddMeal({ onSave, onClose }: Props) {
     const [parsedItems, setParsedItems] = useState<FoodItem[]>([]);
     const [error, setError] = useState('');
     const [step, setStep] = useState<'input' | 'review'>('input');
+    const [isSaving, setIsSaving] = useState(false);
     const mealTotal = useMemo(() => sumNutrition(parsedItems), [parsedItems]);
 
     const handleAnalyze = async () => {
@@ -123,7 +124,7 @@ export default function AddMeal({ onSave, onClose }: Props) {
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (parsedItems.length === 0) return;
 
         const totalNutrition: NutritionInfo = mealTotal;
@@ -136,7 +137,12 @@ export default function AddMeal({ onSave, onClose }: Props) {
             totalNutrition,
         };
 
-        onSave(meal);
+        setIsSaving(true);
+        try {
+            await onSave(meal);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const removeItem = (id: string) => {
@@ -328,11 +334,11 @@ export default function AddMeal({ onSave, onClose }: Props) {
                     ) : (
                         <button
                             type="button"
-                            onClick={handleSave}
-                            disabled={parsedItems.length === 0}
+                            onClick={() => { void handleSave(); }}
+                            disabled={parsedItems.length === 0 || isSaving}
                             className="primary-button tap-scale w-full"
                         >
-                            Log this meal
+                            {isSaving ? 'Saving meal...' : 'Log this meal'}
                         </button>
                     )}
                 </footer>

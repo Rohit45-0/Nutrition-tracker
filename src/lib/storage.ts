@@ -1,160 +1,116 @@
-import { UserProfile, DayLog, MealEntry } from './types';
-import { getTodayDate, sumNutrition } from './nutrition';
+import { AppBootstrap, DayLog, MealEntry, UserProfile, AuthUser } from './types';
 
-const PROFILE_KEY = 'caltrack_profile';
-const LOGS_KEY = 'caltrack_logs';
+export class ApiError extends Error {
+    status: number;
 
-/**
- * Save user profile to localStorage
- */
-export function saveProfile(profile: UserProfile): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-}
-
-/**
- * Get user profile from localStorage
- */
-export function getProfile(): UserProfile | null {
-    if (typeof window === 'undefined') return null;
-    const data = localStorage.getItem(PROFILE_KEY);
-    if (!data) return null;
-    try {
-        return JSON.parse(data) as UserProfile;
-    } catch {
-        return null;
+    constructor(message: string, status: number) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
     }
 }
 
-/**
- * Get all day logs from localStorage
- */
-export function getAllLogs(): DayLog[] {
-    if (typeof window === 'undefined') return [];
-    const data = localStorage.getItem(LOGS_KEY);
-    if (!data) return [];
-    try {
-        return JSON.parse(data) as DayLog[];
-    } catch {
-        return [];
-    }
-}
-
-/**
- * Save all day logs to localStorage
- */
-function saveLogs(logs: DayLog[]): void {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
-}
-
-/**
- * Get or create today's log
- */
-export function getTodayLog(): DayLog {
-    const today = getTodayDate();
-    const logs = getAllLogs();
-    const existing = logs.find((l) => l.date === today);
-    if (existing) return existing;
-
-    const newLog: DayLog = {
-        date: today,
-        meals: [],
-        totalNutrition: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-        waterGlasses: 0,
-    };
-    return newLog;
-}
-
-/**
- * Add a meal to today's log
- */
-export function addMealToLog(meal: MealEntry): DayLog {
-    const today = getTodayDate();
-    const logs = getAllLogs();
-    let logIndex = logs.findIndex((l) => l.date === today);
-
-    if (logIndex === -1) {
-        logs.push({
-            date: today,
-            meals: [],
-            totalNutrition: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-            waterGlasses: 0,
-        });
-        logIndex = logs.length - 1;
+async function readJson<T>(response: Response) {
+    const text = await response.text();
+    if (!text) {
+        return null as T;
     }
 
-    logs[logIndex].meals.push(meal);
-
-    // Recalculate total
-    const allItems = logs[logIndex].meals.flatMap((m) => m.items);
-    logs[logIndex].totalNutrition = sumNutrition(allItems);
-
-    saveLogs(logs);
-    return logs[logIndex];
+    return JSON.parse(text) as T;
 }
 
-/**
- * Delete a meal from today's log
- */
-export function deleteMealFromLog(mealId: string): DayLog | null {
-    const today = getTodayDate();
-    const logs = getAllLogs();
-    const logIndex = logs.findIndex((l) => l.date === today);
+async function request<T>(input: RequestInfo | URL, init?: RequestInit) {
+    const response = await fetch(input, {
+        credentials: 'same-origin',
+        ...init,
+        headers: {
+            ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+            ...(init?.headers ?? {}),
+        },
+    });
 
-    if (logIndex === -1) return null;
+    const payload = await readJson<{ error?: string } & T>(response);
 
-    logs[logIndex].meals = logs[logIndex].meals.filter((m) => m.id !== mealId);
-
-    const allItems = logs[logIndex].meals.flatMap((m) => m.items);
-    logs[logIndex].totalNutrition = allItems.length > 0
-        ? sumNutrition(allItems)
-        : { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
-
-    saveLogs(logs);
-    return logs[logIndex];
-}
-
-/**
- * Update water count for today
- */
-export function updateWater(glasses: number): void {
-    const today = getTodayDate();
-    const logs = getAllLogs();
-    let logIndex = logs.findIndex((l) => l.date === today);
-
-    if (logIndex === -1) {
-        logs.push({
-            date: today,
-            meals: [],
-            totalNutrition: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-            waterGlasses: 0,
-        });
-        logIndex = logs.length - 1;
+    if (!response.ok) {
+        throw new ApiError(payload?.error || 'Request failed.', response.status);
     }
 
-    logs[logIndex].waterGlasses = glasses;
-    saveLogs(logs);
+    return payload as T;
 }
 
-/**
- * Get log for a specific date
- */
-export function getLogByDate(date: string): DayLog | null {
-    const logs = getAllLogs();
-    return logs.find((l) => l.date === date) || null;
+export interface CredentialsInput {
+    email: string;
+    password: string;
+    rememberMe: boolean;
 }
 
-/**
- * Get logs for the last N days
- */
-export function getRecentLogs(days: number): DayLog[] {
-    const logs = getAllLogs();
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    const cutoffStr = cutoff.toISOString().split('T')[0];
+export interface SignUpInput extends CredentialsInput {
+    name: string;
+}
 
-    return logs
-        .filter((l) => l.date >= cutoffStr)
-        .sort((a, b) => b.date.localeCompare(a.date));
+interface AuthResponse {
+    user: AuthUser;
+}
+
+interface ProfileResponse {
+    profile: UserProfile | null;
+    todayLog: DayLog;
+    totalDays: number;
+}
+
+interface DayLogMutationResponse {
+    todayLog: DayLog;
+    totalDays: number;
+}
+
+export async function getBootstrapData(date: string, days = 30) {
+    return request<AppBootstrap>(`/api/app/bootstrap?date=${date}&days=${days}`);
+}
+
+export async function signUp(input: SignUpInput) {
+    return request<AuthResponse>('/api/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify(input),
+    });
+}
+
+export async function signIn(input: CredentialsInput) {
+    return request<AuthResponse>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(input),
+    });
+}
+
+export async function signOut() {
+    return request<{ success: boolean }>('/api/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({}),
+    });
+}
+
+export async function saveProfile(profile: UserProfile, date: string) {
+    return request<ProfileResponse>('/api/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ profile, date }),
+    });
+}
+
+export async function addMealToLog(meal: MealEntry, date: string) {
+    return request<DayLogMutationResponse>('/api/meals', {
+        method: 'POST',
+        body: JSON.stringify({ meal, date }),
+    });
+}
+
+export async function deleteMealFromLog(mealId: string, date: string) {
+    return request<DayLogMutationResponse>(`/api/meals/${mealId}?date=${date}`, {
+        method: 'DELETE',
+    });
+}
+
+export async function updateWater(waterGlasses: number, date: string) {
+    return request<DayLogMutationResponse>('/api/water', {
+        method: 'PUT',
+        body: JSON.stringify({ waterGlasses, date }),
+    });
 }

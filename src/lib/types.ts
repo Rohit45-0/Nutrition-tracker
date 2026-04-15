@@ -47,6 +47,21 @@ export interface DailyTargets {
   fiber: number;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface AppBootstrap {
+  user: AuthUser | null;
+  profile: UserProfile | null;
+  todayLog: DayLog | null;
+  recentLogs: DayLog[];
+  totalDays: number;
+}
+
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type Goal = 'muscle_building' | 'weight_loss' | 'maintain';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
