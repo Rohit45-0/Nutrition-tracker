@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🥗 NutriTrack - Indian Diet Calorie & Protein Tracker
 
-## Getting Started
+A mobile-first calorie and protein tracker designed specifically for **Indian diets**. Track your daily nutrition, set fitness goals, and get personalized recommendations.
 
-First, run the development server:
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss)
 
+## ✨ Features
+
+- **🎯 Goal-Based Planning** — Muscle Building, Weight Loss, or Maintain
+- **🇮🇳 Indian Food Database** — 100+ Indian foods with accurate nutrition data
+- **🤖 AI-Powered Analysis** — GPT-4o-mini for natural language food input
+- **📊 Visual Progress** — Circular calorie ring + macro progress bars
+- **💧 Water Tracker** — Track daily water intake
+- **📅 History** — Day-by-day logs with weekly averages & streak tracking
+- **💡 Smart Tips** — Contextual Indian diet suggestions based on your goal
+- **📱 Mobile-First** — Designed for phone screens with PWA support
+- **🔒 No Login Required** — Data stored locally, just open and use
+
+## 🚀 Getting Started
+
+### 1. Clone & Install
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/Rohit45-0/Nutrition-tracker.git
+cd Nutrition-tracker
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Set up API Key (Optional)
+Create a `.env` file:
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+```
+> **Note:** The app works without an API key using the built-in Indian food database. The API key enables natural language food parsing via GPT-4o-mini.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Run Locally
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) on your phone or browser.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📱 Deploy to Vercel
 
-## Learn More
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Rohit45-0/Nutrition-tracker)
 
-To learn more about Next.js, take a look at the following resources:
+1. Push to GitHub
+2. Import in [Vercel](https://vercel.com)
+3. Add `OPENAI_API_KEY` as environment variable (optional)
+4. Deploy!
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🍛 Supported Indian Foods
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Category | Examples |
+|----------|----------|
+| Breads | Roti, Paratha, Naan, Puri, Dosa, Idli |
+| Rice | White Rice, Brown Rice, Biryani, Pulao, Khichdi |
+| Dal & Lentils | Toor Dal, Moong Dal, Rajma, Chole, Sambar |
+| Vegetables | Palak Paneer, Aloo Gobi, Mix Veg, Paneer Butter Masala |
+| Non-Veg | Chicken Curry, Butter Chicken, Fish Curry, Egg Curry |
+| Dairy | Milk, Curd, Paneer, Lassi, Chaas, Ghee |
+| Fruits | Banana, Guava, Mango, Papaya, Apple |
+| Snacks | Samosa, Poha, Upma, Dhokla, Bhel Puri |
+| Supplements | Whey Protein, Protein Bar |
+| Beverages | Chai, Coffee, Coconut Water, Nimbu Pani |
 
-## Deploy on Vercel
+## 🏗️ Tech Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Framework:** Next.js 16 (App Router)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS 4
+- **AI:** OpenAI GPT-4o-mini (optional)
+- **Storage:** localStorage (Supabase integration planned)
+- **Deployment:** Vercel
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📂 Project Structure
+```
+src/
+├── app/
+│   ├── api/nutrition/route.ts   # AI nutrition API + Indian food DB
+│   ├── globals.css              # Design system
+│   ├── layout.tsx               # Root layout with SEO
+│   └── page.tsx                 # Main app orchestrator
+├── components/
+│   ├── ProfileSetup.tsx         # Onboarding wizard
+│   ├── Dashboard.tsx            # Daily tracking dashboard
+│   ├── AddMeal.tsx              # Meal logging with quick-add
+│   ├── History.tsx              # Historical data view
+│   ├── Settings.tsx             # Profile & targets
+│   └── BottomNav.tsx            # Mobile navigation
+└── lib/
+    ├── types.ts                 # TypeScript interfaces
+    ├── nutrition.ts             # BMR/TDEE/macro calculations
+    └── storage.ts               # localStorage persistence
+```
+
+## 🔮 Planned Features
+
+- [ ] Supabase integration for cloud storage
+- [ ] Weight progress tracking with charts
+- [ ] Meal templates / favorites
+- [ ] Barcode scanner for packaged foods
+- [ ] Weekly/monthly nutrition reports
+
+---
+
+Made with ❤️ for Indian fitness enthusiasts
