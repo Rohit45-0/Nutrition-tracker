@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiError, signIn, signUp } from '@/lib/storage';
 
 interface Props {
@@ -16,11 +16,37 @@ export default function AuthScreen({ onAuthenticated }: Props) {
     const [password, setPassword] = useState('');
     const [rememberMe, setRememberMe] = useState(true);
     const [error, setError] = useState('');
+    const [oauthError, setOauthError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const authError = params.get('auth_error');
+
+        if (!authError) {
+            return;
+        }
+
+        const errorMessages: Record<string, string> = {
+            google_config: 'Google sign-in is not configured yet.',
+            google_denied: 'Google sign-in was cancelled.',
+            google_state: 'Google sign-in expired. Please try again.',
+            google_code: 'Google sign-in did not return a code.',
+            google_failed: 'Google sign-in failed. Please try again.',
+        };
+
+        setOauthError(errorMessages[authError] || 'Unable to sign in with Google.');
+        window.history.replaceState({}, '', window.location.pathname);
+    }, []);
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setError('');
+        setOauthError('');
         setIsSubmitting(true);
 
         try {
@@ -64,6 +90,20 @@ export default function AuthScreen({ onAuthenticated }: Props) {
                     </div>
 
                     <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                        <a
+                            href="/api/auth/google/start"
+                            className="tap-scale flex min-h-12 w-full items-center justify-center gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm font-black text-ink"
+                        >
+                            <GoogleMark />
+                            Continue with Google
+                        </a>
+
+                        <div className="flex items-center gap-3">
+                            <div className="h-px flex-1 bg-line" />
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-faint">or</span>
+                            <div className="h-px flex-1 bg-line" />
+                        </div>
+
                         {mode === 'signup' && (
                             <div>
                                 <label className="mb-2 block text-sm font-black text-ink" htmlFor="name">
@@ -130,9 +170,9 @@ export default function AuthScreen({ onAuthenticated }: Props) {
                             </span>
                         </label>
 
-                        {error && (
+                        {(error || oauthError) && (
                             <div className="rounded-lg border border-danger/20 bg-chili-soft px-3 py-3 text-sm font-bold text-danger">
-                                {error}
+                                {error || oauthError}
                             </div>
                         )}
 
@@ -181,5 +221,16 @@ function ModeButton({
         >
             {children}
         </button>
+    );
+}
+
+function GoogleMark() {
+    return (
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18">
+            <path fill="#EA4335" d="M9 7.364v3.49h4.848c-.213 1.121-.852 2.069-1.81 2.707l2.926 2.271C16.67 14.257 17.545 11.9 17.545 9c0-.545-.05-1.068-.141-1.636H9Z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.805 5.96-2.168l-2.926-2.271c-.804.54-1.833.86-3.034.86-2.35 0-4.343-1.587-5.056-3.716H.928v2.342A8.998 8.998 0 0 0 9 18Z" />
+            <path fill="#4A90E2" d="M3.944 10.705A5.41 5.41 0 0 1 3.661 9c0-.593.102-1.17.283-1.705V4.953H.928A8.996 8.996 0 0 0 0 9c0 1.45.347 2.822.928 4.047l3.016-2.342Z" />
+            <path fill="#FBBC05" d="M9 3.58c1.321 0 2.511.455 3.444 1.346l2.582-2.582C13.466.89 11.43 0 9 0A8.998 8.998 0 0 0 .928 4.953l3.016 2.342C4.657 5.166 6.65 3.58 9 3.58Z" />
+        </svg>
     );
 }

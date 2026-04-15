@@ -98,6 +98,17 @@ export async function ensureDatabaseReady() {
             `);
 
             await pool.query(`
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS google_id TEXT;
+            `);
+
+            await pool.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id
+                ON users (google_id)
+                WHERE google_id IS NOT NULL;
+            `);
+
+            await pool.query(`
                 CREATE TABLE IF NOT EXISTS profiles (
                     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                     weight INTEGER NOT NULL,
@@ -353,6 +364,75 @@ export async function getUserById(userId: string) {
 
     const row = result.rows[0];
     return row ? rowToAuthUser(row) : null;
+}
+
+export async function findOrCreateGoogleUser(input: {
+    googleId: string;
+    email: string;
+    name: string;
+}) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const email = normalizeEmail(input.email);
+    const displayName = input.name.trim() || 'User';
+
+    const existingGoogleUser = await pool.query<DbUserRow>(
+        `
+            SELECT id, email, name, password_hash, google_id, created_at
+            FROM users
+            WHERE google_id = $1
+            LIMIT 1;
+        `,
+        [input.googleId]
+    );
+
+    if (existingGoogleUser.rows[0]) {
+        return rowToAuthUser(existingGoogleUser.rows[0]);
+    }
+
+    const existingEmailUser = await pool.query<DbUserRow>(
+        `
+            SELECT id, email, name, password_hash, google_id, created_at
+            FROM users
+            WHERE email = $1
+            LIMIT 1;
+        `,
+        [email]
+    );
+
+    if (existingEmailUser.rows[0]) {
+        const row = existingEmailUser.rows[0];
+
+        if (row.google_id && row.google_id !== input.googleId) {
+            throw new Error('That email is already linked to a different Google account.');
+        }
+
+        const updateResult = await pool.query<DbUserRow>(
+            `
+                UPDATE users
+                SET
+                    google_id = $2,
+                    name = CASE WHEN name = 'User' OR name = '' THEN $3 ELSE name END,
+                    updated_at = NOW()
+                WHERE id = $1
+                RETURNING id, email, name, password_hash, google_id, created_at;
+            `,
+            [row.id, input.googleId, displayName]
+        );
+
+        return rowToAuthUser(updateResult.rows[0]);
+    }
+
+    const insertResult = await pool.query<DbUserRow>(
+        `
+            INSERT INTO users (id, email, name, google_id)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, email, name, password_hash, google_id, created_at;
+        `,
+        [randomUUID(), email, displayName, input.googleId]
+    );
+
+    return rowToAuthUser(insertResult.rows[0]);
 }
 
 export async function createSession(userId: string, rememberMe: boolean) {
