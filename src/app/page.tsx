@@ -1,65 +1,145 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { UserProfile, DayLog, DailyTargets } from '@/lib/types';
+import { calculateDailyTargets, getDayNumber, getTodayDate } from '@/lib/nutrition';
+import { getProfile, getTodayLog, addMealToLog, deleteMealFromLog, updateWater, getRecentLogs, getAllLogs } from '@/lib/storage';
+import ProfileSetup from '@/components/ProfileSetup';
+import Dashboard from '@/components/Dashboard';
+import AddMeal from '@/components/AddMeal';
+import History from '@/components/History';
+import Settings from '@/components/Settings';
+import BottomNav from '@/components/BottomNav';
+import { MealEntry } from '@/lib/types';
 
 export default function Home() {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [todayLog, setTodayLog] = useState<DayLog | null>(null);
+  const [targets, setTargets] = useState<DailyTargets | null>(null);
+  const [activeTab, setActiveTab] = useState('home');
+  const [showAddMeal, setShowAddMeal] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refreshTodayLog = useCallback(() => {
+    const log = getTodayLog();
+    setTodayLog(log);
+  }, []);
+
+  useEffect(() => {
+    const savedProfile = getProfile();
+    if (savedProfile) {
+      setProfile(savedProfile);
+      setTargets(calculateDailyTargets(savedProfile));
+      refreshTodayLog();
+    } else {
+      setShowSetup(true);
+    }
+    setIsLoading(false);
+  }, [refreshTodayLog]);
+
+  const handleProfileComplete = (newProfile: UserProfile) => {
+    setProfile(newProfile);
+    setTargets(calculateDailyTargets(newProfile));
+    refreshTodayLog();
+    setShowSetup(false);
+  };
+
+  const handleAddMeal = (meal: MealEntry) => {
+    const updatedLog = addMealToLog(meal);
+    setTodayLog(updatedLog);
+    setShowAddMeal(false);
+  };
+
+  const handleDeleteMeal = (mealId: string) => {
+    const updatedLog = deleteMealFromLog(mealId);
+    if (updatedLog) {
+      setTodayLog(updatedLog);
+    }
+  };
+
+  const handleAddWater = () => {
+    if (!todayLog) return;
+    const newCount = Math.min(todayLog.waterGlasses + 1, 12);
+    updateWater(newCount);
+    setTodayLog({ ...todayLog, waterGlasses: newCount });
+  };
+
+  const handleRemoveWater = () => {
+    if (!todayLog) return;
+    const newCount = Math.max(todayLog.waterGlasses - 1, 0);
+    updateWater(newCount);
+    setTodayLog({ ...todayLog, waterGlasses: newCount });
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-bounce">🥗</div>
+          <p className="gradient-text text-xl font-bold">NutriTrack</p>
+          <p className="text-text-muted text-sm mt-1">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Setup flow
+  if (showSetup || !profile) {
+    return (
+      <ProfileSetup
+        onComplete={handleProfileComplete}
+        existingProfile={profile}
+      />
+    );
+  }
+
+  // Add Meal modal
+  if (showAddMeal) {
+    return (
+      <AddMeal
+        onSave={handleAddMeal}
+        onClose={() => setShowAddMeal(false)}
+      />
+    );
+  }
+
+  const dayNumber = getDayNumber(profile.createdAt.split('T')[0], getTodayDate());
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-dvh relative">
+      {activeTab === 'home' && todayLog && targets && (
+        <Dashboard
+          profile={profile}
+          todayLog={todayLog}
+          targets={targets}
+          dayNumber={dayNumber > 0 ? dayNumber : 1}
+          onAddMeal={() => setShowAddMeal(true)}
+          onDeleteMeal={handleDeleteMeal}
+          onAddWater={handleAddWater}
+          onRemoveWater={handleRemoveWater}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      )}
+
+      {activeTab === 'history' && targets && (
+        <History
+          logs={getRecentLogs(30)}
+          targets={targets}
+          startDate={profile.createdAt.split('T')[0]}
+        />
+      )}
+
+      {activeTab === 'settings' && targets && (
+        <Settings
+          profile={profile}
+          targets={targets}
+          onEditProfile={() => setShowSetup(true)}
+          totalDays={getAllLogs().length}
+        />
+      )}
+
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+    </main>
   );
 }
