@@ -8,6 +8,8 @@ interface Props {
     onComplete: (profile: UserProfile) => Promise<void> | void;
     existingProfile?: UserProfile | null;
     accountName?: string;
+    userEmail?: string;
+    onSignOut?: () => Promise<void> | void;
 }
 
 const goals: { value: Goal; label: string; desc: string; marker: string }[] = [
@@ -24,7 +26,7 @@ const activityLevels: { value: ActivityLevel; label: string; desc: string }[] = 
     { value: 'very_active', label: 'Athlete', desc: 'Hard daily training or physical work.' },
 ];
 
-export default function ProfileSetup({ onComplete, existingProfile, accountName }: Props) {
+export default function ProfileSetup({ onComplete, existingProfile, accountName, userEmail, onSignOut }: Props) {
     const [step, setStep] = useState(0);
     const [name, setName] = useState(existingProfile?.name || accountName || '');
     const [weight, setWeight] = useState(existingProfile?.weight || 70);
@@ -34,6 +36,7 @@ export default function ProfileSetup({ onComplete, existingProfile, accountName 
     const [goal, setGoal] = useState<Goal>(existingProfile?.goal || 'muscle_building');
     const [activityLevel, setActivityLevel] = useState<ActivityLevel>(existingProfile?.activityLevel || 'moderate');
     const [isSaving, setIsSaving] = useState(false);
+    const [isSigningOut, setIsSigningOut] = useState(false);
 
     const handleSubmit = async () => {
         setIsSaving(true);
@@ -61,6 +64,20 @@ export default function ProfileSetup({ onComplete, existingProfile, accountName 
 
     const prevStep = () => {
         if (step > 0) setStep(step - 1);
+    };
+
+    const handleSignOut = async () => {
+        if (!onSignOut) {
+            return;
+        }
+
+        setIsSigningOut(true);
+
+        try {
+            await onSignOut();
+        } finally {
+            setIsSigningOut(false);
+        }
     };
 
     const targets = calculateDailyTargets({
@@ -104,6 +121,27 @@ export default function ProfileSetup({ onComplete, existingProfile, accountName 
                             />
                         ))}
                     </div>
+                    {onSignOut && (
+                        <div className="surface-quiet mt-4 flex flex-col gap-3 rounded-lg p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-black uppercase tracking-[0.14em] text-muted">Signed in</p>
+                                <p className="mt-1 truncate text-sm font-black text-ink">
+                                    {accountName || userEmail || 'Account ready'}
+                                </p>
+                                {userEmail && accountName && accountName !== userEmail ? (
+                                    <p className="mt-1 truncate text-xs font-semibold text-muted">{userEmail}</p>
+                                ) : null}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => void handleSignOut()}
+                                className="tap-scale min-h-11 rounded-lg border border-line bg-white px-4 text-sm font-black text-ink transition hover:border-brand hover:text-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={isSigningOut || isSaving}
+                            >
+                                {isSigningOut ? 'Signing out...' : 'Use another account'}
+                            </button>
+                        </div>
+                    )}
                 </header>
 
                 <div className="mt-6 flex-1">
@@ -223,7 +261,8 @@ export default function ProfileSetup({ onComplete, existingProfile, accountName 
                         <button
                             type="button"
                             onClick={prevStep}
-                            className="secondary-button tap-scale"
+                            className="secondary-button tap-scale disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isSaving || isSigningOut}
                         >
                             Back
                         </button>
@@ -234,7 +273,7 @@ export default function ProfileSetup({ onComplete, existingProfile, accountName 
                         type="button"
                         onClick={nextStep}
                         className="primary-button tap-scale"
-                        disabled={isSaving}
+                        disabled={isSaving || isSigningOut}
                     >
                         {isSaving ? 'Saving...' : step === 3 ? 'Start tracking' : 'Continue'}
                     </button>

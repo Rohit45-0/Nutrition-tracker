@@ -171,6 +171,8 @@ export default function Home() {
         onComplete={handleProfileComplete}
         existingProfile={profile}
         accountName={user.name}
+        userEmail={user.email}
+        onSignOut={handleSignOut}
       />
     );
   }
