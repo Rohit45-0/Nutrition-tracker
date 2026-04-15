@@ -1,7 +1,14 @@
 'use client';
 
+import type { CSSProperties, ReactNode } from 'react';
 import { UserProfile, DayLog, DailyTargets, MealEntry } from '@/lib/types';
-import { calcPercentage, getRemaining, getMealEmoji, getMealLabel } from '@/lib/nutrition';
+import {
+    calcPercentage,
+    getRemaining,
+    getMealEmoji,
+    getMealLabel,
+    getGoalLabel,
+} from '@/lib/nutrition';
 
 interface Props {
     profile: UserProfile;
@@ -14,28 +21,38 @@ interface Props {
     onRemoveWater: () => void;
 }
 
-function CircularProgress({ value, max, size = 120, strokeWidth = 8, color = '#6366f1', children }: {
+function CircularProgress({
+    value,
+    max,
+    size = 156,
+    strokeWidth = 12,
+    color = '#0b6b58',
+    children,
+}: {
     value: number;
     max: number;
     size?: number;
     strokeWidth?: number;
     color?: string;
-    children?: React.ReactNode;
+    children?: ReactNode;
 }) {
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
-    const percentage = Math.min(value / max, 1);
+    const percentage = Math.min(value / Math.max(max, 1), 1);
     const dashoffset = circumference * (1 - percentage);
 
     return (
-        <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-            <svg width={size} height={size} className="transform -rotate-90">
+        <div
+            className="relative inline-flex items-center justify-center"
+            style={{ width: size, height: size, '--ring-circumference': circumference } as CSSProperties}
+        >
+            <svg width={size} height={size} className="-rotate-90">
                 <circle
                     cx={size / 2}
                     cy={size / 2}
                     r={radius}
                     fill="none"
-                    stroke="rgba(99, 102, 241, 0.15)"
+                    stroke="rgba(170, 185, 174, 0.55)"
                     strokeWidth={strokeWidth}
                 />
                 <circle
@@ -48,44 +65,48 @@ function CircularProgress({ value, max, size = 120, strokeWidth = 8, color = '#6
                     strokeDasharray={circumference}
                     strokeDashoffset={dashoffset}
                     strokeLinecap="round"
-                    className="transition-all duration-1000 ease-out"
-                    style={{ filter: `drop-shadow(0 0 6px ${color}40)` }}
+                    className="animate-ring transition-all duration-700 ease-out"
                 />
             </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                 {children}
             </div>
         </div>
     );
 }
 
-function MacroBar({ label, current, target, color }: {
+function MacroBar({
+    label,
+    current,
+    target,
+    color,
+    trackClass,
+}: {
     label: string;
     current: number;
     target: number;
     color: string;
+    trackClass: string;
 }) {
     const pct = calcPercentage(current, target);
     const remaining = getRemaining(current, target);
 
     return (
-        <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-text-secondary">{label}</span>
-                <span className="text-xs text-text-muted">{current}g / {target}g</span>
+        <div className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-black text-ink">{label}</span>
+                <span className="text-xs font-bold text-muted">
+                    {current}g / {target}g
+                </span>
             </div>
-            <div className="h-2 bg-surface-lighter rounded-full overflow-hidden">
+            <div className={`h-2 overflow-hidden rounded ${trackClass}`}>
                 <div
-                    className="h-full rounded-full transition-all duration-700 ease-out"
-                    style={{
-                        width: `${pct}%`,
-                        backgroundColor: color,
-                        boxShadow: `0 0 8px ${color}60`,
-                    }}
+                    className="h-full rounded transition-all duration-700 ease-out"
+                    style={{ width: `${pct}%`, backgroundColor: color }}
                 />
             </div>
-            <p className="text-xs text-text-muted">
-                {remaining > 0 ? `${remaining}g to go` : `${Math.abs(remaining)}g over`}
+            <p className="text-xs font-semibold text-muted">
+                {remaining > 0 ? `${remaining}g left` : `${Math.abs(remaining)}g over`}
             </p>
         </div>
     );
@@ -93,150 +114,203 @@ function MacroBar({ label, current, target, color }: {
 
 function MealCard({ meal, onDelete }: { meal: MealEntry; onDelete: () => void }) {
     return (
-        <div className="glass rounded-xl p-3.5 animate-slide-in tap-scale">
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                    <span className="text-lg">{getMealEmoji(meal.mealType)}</span>
-                    <div>
-                        <p className="font-medium text-sm">{getMealLabel(meal.mealType)}</p>
-                        <p className="text-xs text-text-muted">
-                            {new Date(meal.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+        <article className="surface animate-rise-in rounded-lg p-4">
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-soft text-[11px] font-black text-brand-strong">
+                        {getMealEmoji(meal.mealType)}
+                    </span>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <h3 className="text-sm font-black text-ink">{getMealLabel(meal.mealType)}</h3>
+                            <span className="text-xs font-semibold text-muted">
+                                {new Date(meal.timestamp).toLocaleTimeString('en-IN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                })}
+                            </span>
+                        </div>
+                        <p className="mt-1 text-lg font-black text-brand-strong">{meal.totalNutrition.calories} kcal</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-accent">{meal.totalNutrition.calories} kcal</span>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                        className="text-text-muted hover:text-danger transition-colors p-1"
-                        title="Delete meal"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" />
-                        </svg>
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onDelete();
+                    }}
+                    className="tap-scale grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted"
+                    aria-label={`Delete ${getMealLabel(meal.mealType)}`}
+                >
+                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <path d="M19 6 18 20a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    </svg>
+                </button>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-                {meal.items.map((item, idx) => (
-                    <span key={idx} className="text-xs bg-surface-lighter px-2 py-1 rounded-lg text-text-secondary">
-                        {item.name} ({item.quantity})
+
+            <div className="mt-3 flex flex-wrap gap-2">
+                {meal.items.map((item) => (
+                    <span key={item.id} className="rounded-md border border-line bg-white px-2.5 py-1 text-xs font-bold text-ink-soft">
+                        {item.name} - {item.quantity}
                     </span>
                 ))}
             </div>
-            <div className="flex gap-3 mt-2 pt-2 border-t border-border/50">
-                <span className="text-xs text-[#f87171]">P: {meal.totalNutrition.protein}g</span>
-                <span className="text-xs text-[#60a5fa]">C: {meal.totalNutrition.carbs}g</span>
-                <span className="text-xs text-[#fbbf24]">F: {meal.totalNutrition.fat}g</span>
+
+            <div className="mt-4 grid grid-cols-3 divide-x divide-line border-t border-line pt-3 text-center">
+                <MacroMini label="Protein" value={`${meal.totalNutrition.protein}g`} className="text-chili" />
+                <MacroMini label="Carbs" value={`${meal.totalNutrition.carbs}g`} className="text-sky" />
+                <MacroMini label="Fat" value={`${meal.totalNutrition.fat}g`} className="text-warning" />
             </div>
+        </article>
+    );
+}
+
+function MacroMini({ label, value, className }: { label: string; value: string; className: string }) {
+    return (
+        <div>
+            <p className={`text-sm font-black ${className}`}>{value}</p>
+            <p className="text-[11px] font-bold text-muted">{label}</p>
         </div>
     );
 }
 
-export default function Dashboard({ profile, todayLog, targets, dayNumber, onAddMeal, onDeleteMeal, onAddWater, onRemoveWater }: Props) {
+export default function Dashboard({
+    profile,
+    todayLog,
+    targets,
+    dayNumber,
+    onAddMeal,
+    onDeleteMeal,
+    onAddWater,
+    onRemoveWater,
+}: Props) {
     const calPct = calcPercentage(todayLog.totalNutrition.calories, targets.calories);
     const calRemaining = getRemaining(todayLog.totalNutrition.calories, targets.calories);
+    const ringColor = calPct >= 100 ? '#d73c2c' : '#0b6b58';
+    const totalMeals = todayLog.meals.length;
 
     return (
-        <div className="px-4 pb-28 pt-6 space-y-5">
-            {/* Header */}
-            <div className="flex items-center justify-between animate-fade-in-up">
-                <div>
-                    <p className="text-text-secondary text-sm">Day {dayNumber}</p>
-                    <h1 className="text-xl font-bold">Hi, {profile.name} 👋</h1>
+        <div className="screen space-y-5">
+            <header className="animate-rise-in flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-strong">Day {dayNumber}</p>
+                    <h1 className="ink-title mt-1 text-4xl font-black leading-none text-ink">
+                        Hi, {profile.name}
+                    </h1>
+                    <p className="mt-2 text-sm font-bold text-muted">{getGoalLabel(profile.goal)}</p>
                 </div>
-                <div className="glass rounded-xl px-3 py-1.5 text-xs">
-                    <span className="text-accent font-medium">
-                        {profile.goal === 'muscle_building' ? '💪 Bulking' : profile.goal === 'weight_loss' ? '🔥 Cutting' : '⚖️ Maintain'}
-                    </span>
-                </div>
-            </div>
+                <button
+                    type="button"
+                    onClick={onAddMeal}
+                    className="primary-button tap-scale shrink-0 px-4 text-sm"
+                >
+                    Add meal
+                </button>
+            </header>
 
-            {/* Calorie Ring */}
-            <div className="glass rounded-2xl p-5 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                <div className="flex items-center justify-center gap-6">
+            <section className="meal-photo animate-rise-in min-h-28 rounded-lg p-4 text-white shadow-[0_18px_40px_rgba(21,24,22,0.18)]" style={{ animationDelay: '60ms' }}>
+                <p className="max-w-[14rem] text-xs font-black uppercase tracking-[0.18em] text-white/80">Indian meal journal</p>
+                <p className="mt-2 max-w-[16rem] text-2xl font-black leading-tight">Log it while the plate is still warm.</p>
+            </section>
+
+            <section className="surface animate-rise-in rounded-lg p-4" style={{ animationDelay: '110ms' }}>
+                <div className="grid grid-cols-[156px_1fr] items-center gap-4">
                     <CircularProgress
                         value={todayLog.totalNutrition.calories}
                         max={targets.calories}
-                        size={140}
-                        strokeWidth={10}
-                        color={calPct >= 100 ? '#ef4444' : '#6366f1'}
+                        color={ringColor}
                     >
-                        <p className="text-2xl font-bold">{todayLog.totalNutrition.calories}</p>
-                        <p className="text-[10px] text-text-muted">of {targets.calories}</p>
-                        <p className="text-[10px] text-text-secondary">kcal</p>
+                        <p className="text-3xl font-black text-ink">{todayLog.totalNutrition.calories}</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">of {targets.calories}</p>
+                        <p className="text-xs font-black text-brand-strong">kcal</p>
                     </CircularProgress>
 
-                    <div className="space-y-3 flex-1 max-w-[160px]">
-                        <MacroBar label="🥩 Protein" current={todayLog.totalNutrition.protein} target={targets.protein} color="#f87171" />
-                        <MacroBar label="🌾 Carbs" current={todayLog.totalNutrition.carbs} target={targets.carbs} color="#60a5fa" />
-                        <MacroBar label="🧈 Fat" current={todayLog.totalNutrition.fat} target={targets.fat} color="#fbbf24" />
+                    <div className="min-w-0 space-y-3">
+                        <p className={`rounded-lg px-3 py-2 text-sm font-black ${calRemaining >= 0
+                            ? 'bg-brand-soft text-brand-strong'
+                            : 'bg-chili-soft text-danger'
+                            }`}>
+                            {calRemaining >= 0
+                                ? `${calRemaining} kcal left`
+                                : `${Math.abs(calRemaining)} kcal over`}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                            <StatPill label="Meals" value={String(totalMeals)} />
+                            <StatPill label="Water" value={`${todayLog.waterGlasses}/8`} />
+                        </div>
                     </div>
                 </div>
 
-                <div className={`text-center mt-4 py-2 rounded-xl text-sm font-medium ${calRemaining > 0
-                        ? 'bg-primary/10 text-primary-light'
-                        : 'bg-danger/10 text-danger'
-                    }`}>
-                    {calRemaining > 0
-                        ? `🍽️ ${calRemaining} kcal remaining today`
-                        : `⚠️ ${Math.abs(calRemaining)} kcal over target`}
+                <div className="mt-5 space-y-4 border-t border-line pt-4">
+                    <MacroBar label="Protein" current={todayLog.totalNutrition.protein} target={targets.protein} color="#d73c2c" trackClass="bg-chili-soft" />
+                    <MacroBar label="Carbs" current={todayLog.totalNutrition.carbs} target={targets.carbs} color="#2474bc" trackClass="bg-sky-soft" />
+                    <MacroBar label="Fat" current={todayLog.totalNutrition.fat} target={targets.fat} color="#aa7400" trackClass="bg-saffron-soft" />
                 </div>
-            </div>
+            </section>
 
-            {/* Water Tracker */}
-            <div className="glass rounded-2xl p-4 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg">💧</span>
-                        <div>
-                            <p className="font-medium text-sm">Water</p>
-                            <p className="text-xs text-text-muted">{todayLog.waterGlasses}/8 glasses</p>
-                        </div>
+            <section className="surface-quiet animate-rise-in rounded-lg p-4" style={{ animationDelay: '160ms' }}>
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-base font-black text-ink">Water</h2>
+                        <p className="text-sm font-semibold text-muted">{todayLog.waterGlasses} of 8 glasses</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button
+                            type="button"
                             onClick={onRemoveWater}
-                            className="w-8 h-8 rounded-lg bg-surface-lighter flex items-center justify-center text-text-secondary hover:bg-surface tap-scale"
+                            className="tap-scale grid h-11 w-11 place-items-center rounded-lg border border-line bg-white text-xl font-black text-ink-soft"
+                            aria-label="Remove water glass"
                         >
-                            −
+                            -
                         </button>
-                        <div className="flex gap-0.5">
-                            {Array.from({ length: 8 }).map((_, i) => (
-                                <div
-                                    key={i}
-                                    className={`w-3 h-6 rounded-sm transition-all duration-300 ${i < todayLog.waterGlasses ? 'bg-blue-400' : 'bg-surface-lighter'
-                                        }`}
-                                />
-                            ))}
-                        </div>
                         <button
+                            type="button"
                             onClick={onAddWater}
-                            className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary hover:bg-primary/30 tap-scale"
+                            className="tap-scale grid h-11 w-11 place-items-center rounded-lg bg-sky text-xl font-black text-white"
+                            aria-label="Add water glass"
                         >
                             +
                         </button>
                     </div>
                 </div>
-            </div>
+                <div className="mt-4 grid grid-cols-8 gap-1.5">
+                    {Array.from({ length: 8 }).map((_, index) => (
+                        <div
+                            key={index}
+                            className={`h-8 rounded ${index < todayLog.waterGlasses ? 'bg-sky' : 'bg-white border border-line'}`}
+                        />
+                    ))}
+                </div>
+            </section>
 
-            {/* Today's Meals */}
-            <div className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-semibold">Today&apos;s Meals</h2>
+            <section className="animate-rise-in" style={{ animationDelay: '210ms' }}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-xl font-black text-ink">Today&apos;s Meals</h2>
+                        <p className="text-sm font-semibold text-muted">Breakfast, lunch, dinner, and snacks</p>
+                    </div>
                     <button
+                        type="button"
                         onClick={onAddMeal}
-                        className="text-xs bg-primary/20 text-primary-light px-3 py-1.5 rounded-lg hover:bg-primary/30 transition-colors tap-scale"
+                        className="secondary-button tap-scale min-h-11 shrink-0 px-3 text-sm"
                     >
-                        + Add Meal
+                        Add
                     </button>
                 </div>
 
                 {todayLog.meals.length === 0 ? (
-                    <div className="glass rounded-2xl p-8 text-center">
-                        <p className="text-3xl mb-3">🍽️</p>
-                        <p className="text-text-secondary text-sm">No meals logged yet</p>
-                        <p className="text-text-muted text-xs mt-1">Tap &quot;+ Add Meal&quot; to start tracking</p>
+                    <div className="surface rounded-lg p-5">
+                        <p className="text-lg font-black text-ink">No meals yet.</p>
+                        <p className="mt-1 text-sm font-semibold text-muted">Start with what you actually ate. Hinglish works too.</p>
+                        <button
+                            type="button"
+                            onClick={onAddMeal}
+                            className="primary-button tap-scale mt-4 w-full"
+                        >
+                            Log first meal
+                        </button>
                     </div>
                 ) : (
                     <div className="space-y-3">
@@ -245,31 +319,39 @@ export default function Dashboard({ profile, todayLog, targets, dayNumber, onAdd
                         ))}
                     </div>
                 )}
-            </div>
+            </section>
 
-            {/* Quick Tips */}
             {todayLog.meals.length > 0 && (
-                <div className="glass rounded-2xl p-4 animate-fade-in-up" style={{ animationDelay: '0.25s' }}>
-                    <p className="text-sm font-medium mb-2">💡 Suggestion</p>
+                <section className="surface-quiet animate-rise-in rounded-lg p-4" style={{ animationDelay: '260ms' }}>
+                    <p className="text-sm font-black uppercase tracking-[0.16em] text-brand-strong">Next move</p>
                     {todayLog.totalNutrition.protein < targets.protein * 0.5 ? (
-                        <p className="text-xs text-text-secondary">
-                            You&apos;re low on protein! Try adding dal, paneer, eggs, or a protein shake to your next meal.
+                        <p className="mt-2 text-sm font-semibold text-ink-soft">
+                            Protein is running low. Dal, paneer, eggs, chicken, sprouts, or whey can pull the day back in range.
                         </p>
                     ) : calRemaining > 300 ? (
-                        <p className="text-xs text-text-secondary">
-                            You still have {calRemaining} kcal to go. Consider having a balanced meal with roti, sabzi, and dal.
+                        <p className="mt-2 text-sm font-semibold text-ink-soft">
+                            You still have room for a balanced plate: roti or rice, dal, sabzi, and a protein side.
                         </p>
                     ) : calRemaining < 0 ? (
-                        <p className="text-xs text-text-secondary">
-                            You&apos;ve exceeded your calorie target. Try lighter meals for the rest of the day and drink more water.
+                        <p className="mt-2 text-sm font-semibold text-ink-soft">
+                            Calories crossed target. Keep the next plate lighter and drink water before snacking.
                         </p>
                     ) : (
-                        <p className="text-xs text-text-secondary">
-                            Great job! You&apos;re on track with your daily nutrition goals. Keep it up! 💪
+                        <p className="mt-2 text-sm font-semibold text-ink-soft">
+                            You are close to target. Keep the next choice simple and consistent.
                         </p>
                     )}
-                </div>
+                </section>
             )}
+        </div>
+    );
+}
+
+function StatPill({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-lg border border-line bg-white px-3 py-2">
+            <p className="text-lg font-black text-ink">{value}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</p>
         </div>
     );
 }

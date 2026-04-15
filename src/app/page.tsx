@@ -1,16 +1,23 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { UserProfile, DayLog, DailyTargets } from '@/lib/types';
+import { UserProfile, DayLog, DailyTargets, MealEntry } from '@/lib/types';
 import { calculateDailyTargets, getDayNumber, getTodayDate } from '@/lib/nutrition';
-import { getProfile, getTodayLog, addMealToLog, deleteMealFromLog, updateWater, getRecentLogs, getAllLogs } from '@/lib/storage';
+import {
+  getProfile,
+  getTodayLog,
+  addMealToLog,
+  deleteMealFromLog,
+  updateWater,
+  getRecentLogs,
+  getAllLogs,
+} from '@/lib/storage';
 import ProfileSetup from '@/components/ProfileSetup';
 import Dashboard from '@/components/Dashboard';
 import AddMeal from '@/components/AddMeal';
 import History from '@/components/History';
 import Settings from '@/components/Settings';
 import BottomNav from '@/components/BottomNav';
-import { MealEntry } from '@/lib/types';
 
 export default function Home() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -27,15 +34,25 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const savedProfile = getProfile();
-    if (savedProfile) {
-      setProfile(savedProfile);
-      setTargets(calculateDailyTargets(savedProfile));
-      refreshTodayLog();
-    } else {
-      setShowSetup(true);
-    }
-    setIsLoading(false);
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+
+      const savedProfile = getProfile();
+      if (savedProfile) {
+        setProfile(savedProfile);
+        setTargets(calculateDailyTargets(savedProfile));
+        refreshTodayLog();
+      } else {
+        setShowSetup(true);
+      }
+      setIsLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [refreshTodayLog]);
 
   const handleProfileComplete = (newProfile: UserProfile) => {
@@ -49,6 +66,7 @@ export default function Home() {
     const updatedLog = addMealToLog(meal);
     setTodayLog(updatedLog);
     setShowAddMeal(false);
+    setActiveTab('home');
   };
 
   const handleDeleteMeal = (mealId: string) => {
@@ -72,20 +90,18 @@ export default function Home() {
     setTodayLog({ ...todayLog, waterGlasses: newCount });
   };
 
-  // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4 animate-bounce">🥗</div>
-          <p className="gradient-text text-xl font-bold">NutriTrack</p>
-          <p className="text-text-muted text-sm mt-1">Loading...</p>
+      <div className="app-shell flex min-h-dvh items-center justify-center px-6">
+        <div className="surface w-full max-w-sm rounded-lg p-5 text-center">
+          <div className="mx-auto mb-4 h-2 w-24 animate-pulse rounded bg-brand" />
+          <p className="ink-title text-3xl font-black">NutriTrack</p>
+          <p className="mt-1 text-sm font-semibold text-muted">Preparing your journal</p>
         </div>
       </div>
     );
   }
 
-  // Setup flow
   if (showSetup || !profile) {
     return (
       <ProfileSetup
@@ -95,7 +111,6 @@ export default function Home() {
     );
   }
 
-  // Add Meal modal
   if (showAddMeal) {
     return (
       <AddMeal
@@ -108,7 +123,7 @@ export default function Home() {
   const dayNumber = getDayNumber(profile.createdAt.split('T')[0], getTodayDate());
 
   return (
-    <main className="min-h-dvh relative">
+    <main className="app-shell relative min-h-dvh">
       {activeTab === 'home' && todayLog && targets && (
         <Dashboard
           profile={profile}
@@ -139,7 +154,11 @@ export default function Home() {
         />
       )}
 
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onAddMeal={() => setShowAddMeal(true)}
+      />
     </main>
   );
 }

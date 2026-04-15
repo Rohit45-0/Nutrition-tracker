@@ -1,7 +1,7 @@
 import { UserProfile, DailyTargets, NutritionInfo, FoodItem } from './types';
 
 /**
- * Calculate BMR using Mifflin-St Jeor equation
+ * Calculate BMR using Mifflin-St Jeor equation.
  */
 export function calculateBMR(profile: UserProfile): number {
     const { weight, height, age, gender } = profile;
@@ -12,7 +12,7 @@ export function calculateBMR(profile: UserProfile): number {
 }
 
 /**
- * Activity level multipliers for TDEE
+ * Activity level multipliers for TDEE.
  */
 const activityMultipliers = {
     sedentary: 1.2,
@@ -23,7 +23,7 @@ const activityMultipliers = {
 };
 
 /**
- * Calculate TDEE (Total Daily Energy Expenditure)
+ * Calculate TDEE (Total Daily Energy Expenditure).
  */
 export function calculateTDEE(profile: UserProfile): number {
     const bmr = calculateBMR(profile);
@@ -31,22 +31,22 @@ export function calculateTDEE(profile: UserProfile): number {
 }
 
 /**
- * Calculate daily targets based on user profile and goal
+ * Calculate daily targets based on user profile and goal.
  */
 export function calculateDailyTargets(profile: UserProfile): DailyTargets {
     const tdee = calculateTDEE(profile);
 
     let calories: number;
-    let proteinMultiplier: number; // g per kg body weight
+    let proteinMultiplier: number;
 
     switch (profile.goal) {
         case 'muscle_building':
-            calories = tdee + 300; // Caloric surplus
-            proteinMultiplier = 2.0; // Higher protein for muscle building
+            calories = tdee + 300;
+            proteinMultiplier = 2.0;
             break;
         case 'weight_loss':
-            calories = tdee - 500; // Caloric deficit
-            proteinMultiplier = 1.8; // High protein to preserve muscle
+            calories = tdee - 500;
+            proteinMultiplier = 1.8;
             break;
         case 'maintain':
         default:
@@ -57,15 +57,10 @@ export function calculateDailyTargets(profile: UserProfile): DailyTargets {
 
     const protein = Math.round(profile.weight * proteinMultiplier);
     const proteinCalories = protein * 4;
-
-    // Fat: 25-30% of calories
     const fatCalories = calories * 0.27;
     const fat = Math.round(fatCalories / 9);
-
-    // Carbs: remaining calories
     const carbCalories = calories - proteinCalories - fatCalories;
     const carbs = Math.round(carbCalories / 4);
-
     const fiber = profile.gender === 'male' ? 38 : 25;
 
     return {
@@ -78,7 +73,7 @@ export function calculateDailyTargets(profile: UserProfile): DailyTargets {
 }
 
 /**
- * Sum up nutrition from multiple food items
+ * Sum up nutrition from multiple food items.
  */
 export function sumNutrition(items: FoodItem[]): NutritionInfo {
     return items.reduce(
@@ -94,14 +89,16 @@ export function sumNutrition(items: FoodItem[]): NutritionInfo {
 }
 
 /**
- * Get today's date in YYYY-MM-DD format
+ * Get today's date in local YYYY-MM-DD format.
  */
 export function getTodayDate(): string {
-    return new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+    return local.toISOString().split('T')[0];
 }
 
 /**
- * Format date for display
+ * Format date for display.
  */
 export function formatDate(dateStr: string): string {
     const date = new Date(dateStr + 'T00:00:00');
@@ -113,7 +110,7 @@ export function formatDate(dateStr: string): string {
 }
 
 /**
- * Get day number from start date
+ * Get day number from start date.
  */
 export function getDayNumber(startDate: string, currentDate: string): number {
     const start = new Date(startDate);
@@ -123,20 +120,20 @@ export function getDayNumber(startDate: string, currentDate: string): number {
 }
 
 /**
- * Get meal type emoji
+ * Get a short meal marker for compact UI.
  */
 export function getMealEmoji(mealType: string): string {
-    const emojis: Record<string, string> = {
-        breakfast: '🌅',
-        lunch: '☀️',
-        dinner: '🌙',
-        snack: '🍿',
+    const markers: Record<string, string> = {
+        breakfast: 'AM',
+        lunch: 'NO',
+        dinner: 'PM',
+        snack: 'SN',
     };
-    return emojis[mealType] || '🍽️';
+    return markers[mealType] || 'ME';
 }
 
 /**
- * Get meal type label
+ * Get meal type label.
  */
 export function getMealLabel(mealType: string): string {
     const labels: Record<string, string> = {
@@ -149,19 +146,19 @@ export function getMealLabel(mealType: string): string {
 }
 
 /**
- * Get goal label
+ * Get goal label.
  */
 export function getGoalLabel(goal: string): string {
     const labels: Record<string, string> = {
-        muscle_building: '💪 Muscle Building',
-        weight_loss: '🏃 Weight Loss',
-        maintain: '⚖️ Maintain Weight',
+        muscle_building: 'Muscle building',
+        weight_loss: 'Weight loss',
+        maintain: 'Maintain weight',
     };
     return labels[goal] || goal;
 }
 
 /**
- * Calculate percentage with cap at 100
+ * Calculate percentage with cap at 100.
  */
 export function calcPercentage(current: number, target: number): number {
     if (target <= 0) return 0;
@@ -169,7 +166,7 @@ export function calcPercentage(current: number, target: number): number {
 }
 
 /**
- * Get remaining macro with sign
+ * Get remaining macro with sign.
  */
 export function getRemaining(current: number, target: number): number {
     return target - current;

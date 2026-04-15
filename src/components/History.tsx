@@ -12,134 +12,142 @@ interface Props {
 export default function History({ logs, targets, startDate }: Props) {
     if (logs.length === 0) {
         return (
-            <div className="px-4 pb-28 pt-6">
-                <h1 className="text-xl font-bold mb-6">📊 History</h1>
-                <div className="glass rounded-2xl p-8 text-center">
-                    <p className="text-3xl mb-3">📅</p>
-                    <p className="text-text-secondary text-sm">No history yet</p>
-                    <p className="text-text-muted text-xs mt-1">Start logging meals to see your history here</p>
+            <div className="screen space-y-5">
+                <header>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-strong">History</p>
+                    <h1 className="ink-title mt-1 text-4xl font-black leading-none text-ink">Your logbook</h1>
+                </header>
+                <div className="surface rounded-lg p-5">
+                    <p className="text-lg font-black text-ink">No history yet.</p>
+                    <p className="mt-1 text-sm font-semibold text-muted">Meals you log today will build your daily record here.</p>
                 </div>
             </div>
         );
     }
 
-    // Calculate weekly averages
     const last7 = logs.slice(0, 7);
-    const avgCalories = Math.round(last7.reduce((s, l) => s + l.totalNutrition.calories, 0) / last7.length);
-    const avgProtein = Math.round(last7.reduce((s, l) => s + l.totalNutrition.protein, 0) / last7.length);
+    const avgCalories = Math.round(last7.reduce((sum, log) => sum + log.totalNutrition.calories, 0) / last7.length);
+    const avgProtein = Math.round(last7.reduce((sum, log) => sum + log.totalNutrition.protein, 0) / last7.length);
+    const goodDays = last7.filter((log) => {
+        const pct = calcPercentage(log.totalNutrition.calories, targets.calories);
+        return pct >= 80 && pct <= 120;
+    }).length;
 
     return (
-        <div className="px-4 pb-28 pt-6 space-y-5">
-            <h1 className="text-xl font-bold animate-fade-in-up">📊 History</h1>
+        <div className="screen space-y-5">
+            <header className="animate-rise-in">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-strong">History</p>
+                <h1 className="ink-title mt-1 text-4xl font-black leading-none text-ink">Your logbook</h1>
+                <p className="mt-2 text-sm font-bold text-muted">Last 30 days, newest first.</p>
+            </header>
 
-            {/* Weekly Summary */}
-            <div className="glass rounded-2xl p-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                <p className="text-sm font-medium mb-3">Last 7 Days Average</p>
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-surface rounded-xl p-3 text-center">
-                        <p className="text-xl font-bold gradient-text">{avgCalories}</p>
-                        <p className="text-xs text-text-muted">Avg Calories</p>
-                        <p className={`text-[10px] mt-1 ${avgCalories <= targets.calories ? 'text-success' : 'text-danger'}`}>
-                            {avgCalories <= targets.calories ? '✅ On track' : '⚠️ Over target'}
-                        </p>
-                    </div>
-                    <div className="bg-surface rounded-xl p-3 text-center">
-                        <p className="text-xl font-bold text-[#f87171]">{avgProtein}g</p>
-                        <p className="text-xs text-text-muted">Avg Protein</p>
-                        <p className={`text-[10px] mt-1 ${avgProtein >= targets.protein * 0.8 ? 'text-success' : 'text-warning'}`}>
-                            {avgProtein >= targets.protein * 0.8 ? '✅ Good' : '⚠️ Low'}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Streak */}
-            <div className="glass rounded-2xl p-4 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-                <div className="flex items-center gap-3">
-                    <span className="text-2xl">🔥</span>
+            <section className="surface animate-rise-in rounded-lg p-4" style={{ animationDelay: '70ms' }}>
+                <div className="mb-4 flex items-center justify-between gap-4">
                     <div>
-                        <p className="font-medium text-sm">Tracking Streak</p>
-                        <p className="text-xs text-text-muted">{logs.length} days logged since you started</p>
+                        <h2 className="text-base font-black text-ink">7-day pulse</h2>
+                        <p className="text-sm font-semibold text-muted">{goodDays} target days this week</p>
                     </div>
+                    <span className="rounded-lg bg-brand-soft px-3 py-2 text-sm font-black text-brand-strong">
+                        {logs.length} days
+                    </span>
                 </div>
-                <div className="flex gap-1 mt-3 flex-wrap">
-                    {logs.slice(0, 14).map((log) => {
+                <div className="grid grid-cols-2 divide-x divide-line border-y border-line py-4 text-center">
+                    <SummaryMetric label="Avg kcal" value={avgCalories} tone={avgCalories <= targets.calories ? 'text-brand-strong' : 'text-danger'} />
+                    <SummaryMetric label="Avg protein" value={`${avgProtein}g`} tone={avgProtein >= targets.protein * 0.8 ? 'text-brand-strong' : 'text-warning'} />
+                </div>
+                <div className="mt-4 grid grid-cols-7 gap-2">
+                    {last7.map((log) => {
                         const pct = calcPercentage(log.totalNutrition.calories, targets.calories);
                         return (
-                            <div
-                                key={log.date}
-                                className={`w-5 h-5 rounded-sm flex items-center justify-center text-[8px] ${pct >= 80 && pct <= 120
-                                        ? 'bg-success/30 text-success'
+                            <div key={log.date} className="space-y-1 text-center">
+                                <div
+                                    className={`h-10 rounded-lg border ${pct >= 80 && pct <= 120
+                                        ? 'border-brand/30 bg-brand-soft'
                                         : pct > 120
-                                            ? 'bg-danger/30 text-danger'
-                                            : 'bg-warning/30 text-warning'
-                                    }`}
-                                title={`${log.date}: ${log.totalNutrition.calories} kcal`}
-                            >
-                                {pct >= 80 && pct <= 120 ? '✓' : pct > 120 ? '!' : '·'}
+                                            ? 'border-danger/30 bg-chili-soft'
+                                            : 'border-warning/30 bg-saffron-soft'
+                                        }`}
+                                    title={`${log.date}: ${log.totalNutrition.calories} kcal`}
+                                />
+                                <p className="text-[10px] font-bold text-muted">{formatDate(log.date).split(' ')[0]}</p>
                             </div>
                         );
                     })}
                 </div>
-            </div>
+            </section>
 
-            {/* Day Cards */}
-            <div className="space-y-3">
+            <section className="space-y-3">
                 {logs.map((log, idx) => {
                     const calPct = calcPercentage(log.totalNutrition.calories, targets.calories);
                     const dayNum = Math.floor(
                         (new Date(log.date).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
                     ) + 1;
+                    const status = calPct >= 80 && calPct <= 120 ? 'On target' : calPct > 120 ? 'Over target' : 'Under target';
 
                     return (
-                        <div
+                        <article
                             key={log.date}
-                            className="glass rounded-2xl p-4 animate-slide-in"
-                            style={{ animationDelay: `${idx * 0.05}s` }}
+                            className="surface animate-rise-in rounded-lg p-4"
+                            style={{ animationDelay: `${Math.min(idx * 35, 280)}ms` }}
                         >
-                            <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-start justify-between gap-3">
                                 <div>
-                                    <p className="font-medium text-sm">{formatDate(log.date)}</p>
-                                    <p className="text-xs text-text-muted">Day {dayNum > 0 ? dayNum : 1}</p>
+                                    <h2 className="text-base font-black text-ink">{formatDate(log.date)}</h2>
+                                    <p className="text-sm font-semibold text-muted">Day {dayNum > 0 ? dayNum : 1}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className={`text-sm font-bold ${calPct >= 80 && calPct <= 120 ? 'text-success' : calPct > 120 ? 'text-danger' : 'text-warning'
-                                        }`}>
+                                    <p className={`text-base font-black ${calPct >= 80 && calPct <= 120 ? 'text-brand-strong' : calPct > 120 ? 'text-danger' : 'text-warning'}`}>
                                         {log.totalNutrition.calories} kcal
                                     </p>
-                                    <p className="text-[10px] text-text-muted">{calPct}% of target</p>
+                                    <p className="text-xs font-bold text-muted">{status}</p>
                                 </div>
                             </div>
 
-                            {/* Mini macro bar */}
-                            <div className="h-1.5 bg-surface-lighter rounded-full overflow-hidden mb-3">
+                            <div className="mt-4 h-2 overflow-hidden rounded bg-page-deep">
                                 <div
-                                    className={`h-full rounded-full transition-all ${calPct >= 80 && calPct <= 120 ? 'bg-success' : calPct > 120 ? 'bg-danger' : 'bg-warning'
-                                        }`}
+                                    className={`h-full rounded ${calPct >= 80 && calPct <= 120 ? 'bg-brand' : calPct > 120 ? 'bg-danger' : 'bg-saffron'}`}
                                     style={{ width: `${Math.min(calPct, 100)}%` }}
                                 />
                             </div>
 
-                            {/* Macros */}
-                            <div className="flex gap-4 text-xs mb-2">
-                                <span className="text-[#f87171]">P: {log.totalNutrition.protein}g</span>
-                                <span className="text-[#60a5fa]">C: {log.totalNutrition.carbs}g</span>
-                                <span className="text-[#fbbf24]">F: {log.totalNutrition.fat}g</span>
-                                <span className="text-blue-400">💧 {log.waterGlasses}</span>
+                            <div className="mt-4 grid grid-cols-4 divide-x divide-line border-y border-line py-3 text-center">
+                                <DayMetric label="Protein" value={`${log.totalNutrition.protein}g`} className="text-chili" />
+                                <DayMetric label="Carbs" value={`${log.totalNutrition.carbs}g`} className="text-sky" />
+                                <DayMetric label="Fat" value={`${log.totalNutrition.fat}g`} className="text-warning" />
+                                <DayMetric label="Water" value={String(log.waterGlasses)} className="text-sky" />
                             </div>
 
-                            {/* Meals summary */}
-                            <div className="flex flex-wrap gap-1.5">
-                                {log.meals.map((meal) => (
-                                    <span key={meal.id} className="text-[10px] bg-surface-lighter px-2 py-0.5 rounded-md text-text-muted">
-                                        {getMealEmoji(meal.mealType)} {getMealLabel(meal.mealType)} ({meal.totalNutrition.calories})
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
+                            {log.meals.length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {log.meals.map((meal) => (
+                                        <span key={meal.id} className="rounded-md border border-line bg-white px-2 py-1 text-xs font-bold text-ink-soft">
+                                            {getMealEmoji(meal.mealType)} {getMealLabel(meal.mealType)} - {meal.totalNutrition.calories}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </article>
                     );
                 })}
-            </div>
+            </section>
+        </div>
+    );
+}
+
+function SummaryMetric({ label, value, tone }: { label: string; value: number | string; tone: string }) {
+    return (
+        <div>
+            <p className={`text-2xl font-black ${tone}`}>{value}</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted">{label}</p>
+        </div>
+    );
+}
+
+function DayMetric({ label, value, className }: { label: string; value: string; className: string }) {
+    return (
+        <div>
+            <p className={`text-sm font-black ${className}`}>{value}</p>
+            <p className="text-[10px] font-bold text-muted">{label}</p>
         </div>
     );
 }

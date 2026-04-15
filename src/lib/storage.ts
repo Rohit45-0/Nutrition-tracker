@@ -1,4 +1,4 @@
-import { UserProfile, DayLog, MealEntry, NutritionInfo } from './types';
+import { UserProfile, DayLog, MealEntry } from './types';
 import { getTodayDate, sumNutrition } from './nutrition';
 
 const PROFILE_KEY = 'caltrack_profile';
