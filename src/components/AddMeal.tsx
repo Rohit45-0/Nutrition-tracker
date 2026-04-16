@@ -7,6 +7,7 @@ import { getMealEmoji, getMealLabel, sumNutrition } from '@/lib/nutrition';
 interface Props {
     onSave: (meal: MealEntry) => Promise<void> | void;
     onClose: () => void;
+    initialMeal?: MealEntry | null;
 }
 
 const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -54,13 +55,18 @@ const quickAddSuggestions: Record<MealType, string[]> = {
     ],
 };
 
-export default function AddMeal({ onSave, onClose }: Props) {
-    const [mealType, setMealType] = useState<MealType>('breakfast');
-    const [foodText, setFoodText] = useState('');
+function mealToFoodText(meal: MealEntry) {
+    return meal.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
+}
+
+export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
+    const isEditing = Boolean(initialMeal);
+    const [mealType, setMealType] = useState<MealType>(initialMeal?.mealType || 'breakfast');
+    const [foodText, setFoodText] = useState(initialMeal ? mealToFoodText(initialMeal) : '');
     const [loading, setLoading] = useState(false);
-    const [parsedItems, setParsedItems] = useState<FoodItem[]>([]);
+    const [parsedItems, setParsedItems] = useState<FoodItem[]>(initialMeal?.items || []);
     const [error, setError] = useState('');
-    const [step, setStep] = useState<'input' | 'review'>('input');
+    const [step, setStep] = useState<'input' | 'review'>(initialMeal ? 'review' : 'input');
     const [isSaving, setIsSaving] = useState(false);
     const mealTotal = useMemo(() => sumNutrition(parsedItems), [parsedItems]);
 
@@ -130,10 +136,10 @@ export default function AddMeal({ onSave, onClose }: Props) {
         const totalNutrition: NutritionInfo = mealTotal;
 
         const meal: MealEntry = {
-            id: Date.now().toString(),
+            id: initialMeal?.id || Date.now().toString(),
             mealType,
             items: parsedItems,
-            timestamp: new Date().toISOString(),
+            timestamp: initialMeal?.timestamp || new Date().toISOString(),
             totalNutrition,
         };
 
@@ -163,7 +169,7 @@ export default function AddMeal({ onSave, onClose }: Props) {
                             type="button"
                             onClick={onClose}
                             className="tap-scale grid h-11 w-11 place-items-center rounded-lg border border-line bg-white text-ink"
-                            aria-label="Close add meal"
+                            aria-label={isEditing ? 'Close edit meal' : 'Close add meal'}
                         >
                             <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M19 12H5" />
@@ -174,7 +180,7 @@ export default function AddMeal({ onSave, onClose }: Props) {
                             <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-strong">
                                 {step === 'input' ? 'Step 1 of 2' : 'Step 2 of 2'}
                             </p>
-                            <h1 className="text-lg font-black text-ink">Log a meal</h1>
+                            <h1 className="text-lg font-black text-ink">{isEditing ? 'Edit meal' : 'Log a meal'}</h1>
                         </div>
                         <div className="h-11 w-11" />
                     </div>
@@ -189,7 +195,9 @@ export default function AddMeal({ onSave, onClose }: Props) {
                         <div className="space-y-6">
                             <section>
                                 <div className="mb-3">
-                                    <h2 className="ink-title text-3xl font-black text-ink">What plate is this?</h2>
+                                    <h2 className="ink-title text-3xl font-black text-ink">
+                                        {isEditing ? 'Update this plate' : 'What plate is this?'}
+                                    </h2>
                                     <p className="mt-1 text-sm font-semibold text-muted">Pick the meal, then type it naturally.</p>
                                 </div>
                                 <div className="grid grid-cols-4 gap-2">
@@ -338,7 +346,7 @@ export default function AddMeal({ onSave, onClose }: Props) {
                             disabled={parsedItems.length === 0 || isSaving}
                             className="primary-button tap-scale w-full"
                         >
-                            {isSaving ? 'Saving meal...' : 'Log this meal'}
+                            {isSaving ? 'Saving meal...' : isEditing ? 'Save changes' : 'Log this meal'}
                         </button>
                     )}
                 </footer>

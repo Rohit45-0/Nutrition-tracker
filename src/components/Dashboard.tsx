@@ -16,6 +16,7 @@ interface Props {
     targets: DailyTargets;
     dayNumber: number;
     onAddMeal: () => void;
+    onEditMeal: (meal: MealEntry) => void;
     onDeleteMeal: (mealId: string) => void;
     onAddWater: () => void;
     onRemoveWater: () => void;
@@ -112,7 +113,7 @@ function MacroBar({
     );
 }
 
-function MealCard({ meal, onDelete }: { meal: MealEntry; onDelete: () => void }) {
+function MealCard({ meal, onEdit, onDelete }: { meal: MealEntry; onEdit: () => void; onDelete: () => void }) {
     return (
         <article className="surface animate-rise-in rounded-lg p-4">
             <div className="flex items-start justify-between gap-3">
@@ -133,21 +134,37 @@ function MealCard({ meal, onDelete }: { meal: MealEntry; onDelete: () => void })
                         <p className="mt-1 text-lg font-black text-brand-strong">{meal.totalNutrition.calories} kcal</p>
                     </div>
                 </div>
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        event.stopPropagation();
-                        onDelete();
-                    }}
-                    className="tap-scale grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted"
-                    aria-label={`Delete ${getMealLabel(meal.mealType)}`}
-                >
-                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        <path d="M19 6 18 20a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                    </svg>
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onEdit();
+                        }}
+                        className="tap-scale grid h-10 w-10 place-items-center rounded-lg border border-line bg-white text-brand-strong"
+                        aria-label={`Edit ${getMealLabel(meal.mealType)}`}
+                    >
+                        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onDelete();
+                        }}
+                        className="tap-scale grid h-10 w-10 place-items-center rounded-lg border border-line bg-white text-muted"
+                        aria-label={`Delete ${getMealLabel(meal.mealType)}`}
+                    >
+                        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            <path d="M19 6 18 20a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -182,6 +199,7 @@ export default function Dashboard({
     targets,
     dayNumber,
     onAddMeal,
+    onEditMeal,
     onDeleteMeal,
     onAddWater,
     onRemoveWater,
@@ -315,7 +333,12 @@ export default function Dashboard({
                 ) : (
                     <div className="space-y-3">
                         {todayLog.meals.map((meal) => (
-                            <MealCard key={meal.id} meal={meal} onDelete={() => onDeleteMeal(meal.id)} />
+                            <MealCard
+                                key={meal.id}
+                                meal={meal}
+                                onEdit={() => onEditMeal(meal)}
+                                onDelete={() => onDeleteMeal(meal.id)}
+                            />
                         ))}
                     </div>
                 )}

@@ -9,6 +9,7 @@ import {
   getBootstrapData,
   saveProfile,
   signOut,
+  updateMealInLog,
   updateWater,
 } from '@/lib/storage';
 import AuthScreen from '@/components/AuthScreen';
@@ -45,6 +46,7 @@ export default function Home() {
   const [totalDays, setTotalDays] = useState(0);
   const [activeTab, setActiveTab] = useState('home');
   const [showAddMeal, setShowAddMeal] = useState(false);
+  const [editingMeal, setEditingMeal] = useState<MealEntry | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -103,12 +105,30 @@ export default function Home() {
     setShowSetup(false);
   }, [syncTodayState]);
 
-  const handleAddMeal = useCallback(async (meal: MealEntry) => {
-    const result = await addMealToLog(meal, getTodayDate());
-    syncTodayState(result.todayLog, result.totalDays);
+  const openAddMeal = useCallback(() => {
+    setEditingMeal(null);
+    setShowAddMeal(true);
+  }, []);
+
+  const closeMealEditor = useCallback(() => {
     setShowAddMeal(false);
+    setEditingMeal(null);
+  }, []);
+
+  const handleSaveMeal = useCallback(async (meal: MealEntry) => {
+    const result = editingMeal
+      ? await updateMealInLog(editingMeal.id, meal, getTodayDate())
+      : await addMealToLog(meal, getTodayDate());
+
+    syncTodayState(result.todayLog, result.totalDays);
+    closeMealEditor();
     setActiveTab('home');
-  }, [syncTodayState]);
+  }, [closeMealEditor, editingMeal, syncTodayState]);
+
+  const handleEditMeal = useCallback((meal: MealEntry) => {
+    setEditingMeal(meal);
+    setShowAddMeal(true);
+  }, []);
 
   const handleDeleteMeal = useCallback(async (mealId: string) => {
     const result = await deleteMealFromLog(mealId, getTodayDate());
@@ -137,6 +157,7 @@ export default function Home() {
     setTotalDays(0);
     setShowSetup(false);
     setShowAddMeal(false);
+    setEditingMeal(null);
     setActiveTab('home');
   }, []);
 
@@ -180,8 +201,9 @@ export default function Home() {
   if (showAddMeal) {
     return (
       <AddMeal
-        onSave={handleAddMeal}
-        onClose={() => setShowAddMeal(false)}
+        onSave={handleSaveMeal}
+        onClose={closeMealEditor}
+        initialMeal={editingMeal}
       />
     );
   }
@@ -194,7 +216,8 @@ export default function Home() {
           todayLog={todayLog}
           targets={targets}
           dayNumber={dayNumber}
-          onAddMeal={() => setShowAddMeal(true)}
+          onAddMeal={openAddMeal}
+          onEditMeal={handleEditMeal}
           onDeleteMeal={handleDeleteMeal}
           onAddWater={handleAddWater}
           onRemoveWater={handleRemoveWater}
@@ -223,7 +246,7 @@ export default function Home() {
       <BottomNav
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onAddMeal={() => setShowAddMeal(true)}
+        onAddMeal={openAddMeal}
       />
     </main>
   );

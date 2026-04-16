@@ -108,6 +108,13 @@ export async function deleteMealFromLog(mealId: string, date: string) {
     });
 }
 
+export async function updateMealInLog(mealId: string, meal: MealEntry, date: string) {
+    return request<DayLogMutationResponse>(`/api/meals/${encodeURIComponent(mealId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ meal, date }),
+    });
+}
+
 export async function updateWater(waterGlasses: number, date: string) {
     return request<DayLogMutationResponse>('/api/water', {
         method: 'PUT',

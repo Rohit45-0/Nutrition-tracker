@@ -731,6 +731,40 @@ export async function deleteMealForUser(userId: string, date: string, mealId: st
     };
 }
 
+export async function updateMealForUser(userId: string, date: string, mealId: string, meal: MealEntry) {
+    const todayLog = await getTodayLogForUser(userId, date);
+    let foundMeal: MealEntry | null = null;
+
+    const meals = todayLog.meals.map((entry) => {
+        if (entry.id !== mealId) {
+            return entry;
+        }
+
+        foundMeal = entry;
+        return {
+            ...meal,
+            id: mealId,
+            timestamp: entry.timestamp,
+        };
+    });
+
+    if (!foundMeal) {
+        return null;
+    }
+
+    const allItems = meals.flatMap((entry) => entry.items);
+    const savedLog = await saveDayLog(userId, {
+        ...todayLog,
+        meals,
+        totalNutrition: allItems.length > 0 ? sumNutrition(allItems) : { ...ZERO_NUTRITION },
+    });
+
+    return {
+        todayLog: savedLog,
+        totalDays: await countStoredLogs(userId),
+    };
+}
+
 export async function updateWaterForUser(userId: string, date: string, waterGlasses: number) {
     const todayLog = await getTodayLogForUser(userId, date);
     const savedLog = await saveDayLog(userId, {
