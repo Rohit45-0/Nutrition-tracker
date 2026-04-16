@@ -295,9 +295,9 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-page/95 backdrop-blur">
-            <div className="app-shell flex min-h-dvh flex-col">
-                <header className="sticky top-0 z-10 border-b border-line bg-page/90 px-4 py-4 backdrop-blur">
+        <div className="fixed inset-0 z-50 overflow-hidden bg-page/95 backdrop-blur">
+            <div className="app-shell meal-modal-shell flex min-h-0 flex-col">
+                <header className="shrink-0 border-b border-line bg-page/90 px-4 py-4 backdrop-blur">
                     <div className="flex items-center justify-between gap-3">
                         <button
                             type="button"
@@ -324,7 +324,7 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                     </div>
                 </header>
 
-                <div className="smooth-scroll-panel flex-1 overflow-y-auto px-4 py-5">
+                <div className="smooth-scroll-panel min-h-0 flex-1 overflow-y-auto px-4 py-5">
                     {step === 'input' ? (
                         <div className="space-y-6">
                             <section>
@@ -549,7 +549,7 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                     )}
                 </div>
 
-                <footer className="sticky bottom-0 border-t border-line bg-surface/95 p-4 pb-safe backdrop-blur">
+                <footer className="shrink-0 border-t border-line bg-surface/95 p-4 pb-safe backdrop-blur">
                     {step === 'input' ? (
                         <button
                             type="button"

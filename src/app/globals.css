@@ -115,6 +115,19 @@ input[type="number"] {
   overflow-x: hidden;
 }
 
+.meal-modal-shell {
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+@supports not (height: 100dvh) {
+  .meal-modal-shell {
+    height: 100vh;
+    max-height: 100vh;
+  }
+}
+
 .smooth-scroll-panel {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
