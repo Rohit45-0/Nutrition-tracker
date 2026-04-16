@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import Image from 'next/image';
+import { useMemo, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { MealType, MealEntry, FoodItem, NutritionInfo } from '@/lib/types';
 import { getMealEmoji, getMealLabel, sumNutrition } from '@/lib/nutrition';
 
@@ -11,6 +13,18 @@ interface Props {
 }
 
 const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const PHOTO_MAX_DIMENSION = 1024;
+const PHOTO_QUALITY = 0.72;
+
+interface NutritionApiItem {
+    name: string;
+    quantity: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber: number;
+}
 
 const quickAddSuggestions: Record<MealType, string[]> = {
     breakfast: [
@@ -59,16 +73,82 @@ function mealToFoodText(meal: MealEntry) {
     return meal.items.map((item) => `${item.quantity} ${item.name}`).join(', ');
 }
 
+function nutritionItemsToFoodItems(items: NutritionApiItem[]): FoodItem[] {
+    return items.map((item, idx) => ({
+        id: `${Date.now()}-${idx}`,
+        name: item.name,
+        quantity: item.quantity,
+        nutrition: {
+            calories: item.calories,
+            protein: item.protein,
+            carbs: item.carbs,
+            fat: item.fat,
+            fiber: item.fiber,
+        },
+    }));
+}
+
+function loadImage(file: File): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+        const image = document.createElement('img');
+        const objectUrl = URL.createObjectURL(file);
+
+        image.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(image);
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Could not load image'));
+        };
+        image.src = objectUrl;
+    });
+}
+
+async function resizeImageForAnalysis(file: File): Promise<string> {
+    if (!file.type.startsWith('image/')) {
+        throw new Error('Unsupported file type');
+    }
+
+    const image = await loadImage(file);
+    const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
+    const scale = largestSide > PHOTO_MAX_DIMENSION ? PHOTO_MAX_DIMENSION / largestSide : 1;
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+        throw new Error('Canvas is unavailable');
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    context.drawImage(image, 0, 0, width, height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+    if (dataUrl === 'data:,') {
+        throw new Error('Could not prepare image');
+    }
+
+    return dataUrl;
+}
+
 export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
     const isEditing = Boolean(initialMeal);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [mealType, setMealType] = useState<MealType>(initialMeal?.mealType || 'breakfast');
     const [foodText, setFoodText] = useState(initialMeal ? mealToFoodText(initialMeal) : '');
+    const [analysisMode, setAnalysisMode] = useState<'text' | 'photo'>('text');
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    const [photoName, setPhotoName] = useState('');
     const [loading, setLoading] = useState(false);
     const [parsedItems, setParsedItems] = useState<FoodItem[]>(initialMeal?.items || []);
     const [error, setError] = useState('');
     const [step, setStep] = useState<'input' | 'review'>(initialMeal ? 'review' : 'input');
     const [isSaving, setIsSaving] = useState(false);
     const mealTotal = useMemo(() => sumNutrition(parsedItems), [parsedItems]);
+    const footerAnalyzeDisabled = analysisMode === 'photo' ? !photoPreview || loading : !foodText.trim() || loading;
 
     const handleAnalyze = async () => {
         if (!foodText.trim()) return;
@@ -99,31 +179,75 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                 return;
             }
 
-            const items: FoodItem[] = data.items.map((item: {
-                name: string;
-                quantity: string;
-                calories: number;
-                protein: number;
-                carbs: number;
-                fat: number;
-                fiber: number;
-            }, idx: number) => ({
-                id: `${Date.now()}-${idx}`,
-                name: item.name,
-                quantity: item.quantity,
-                nutrition: {
-                    calories: item.calories,
-                    protein: item.protein,
-                    carbs: item.carbs,
-                    fat: item.fat,
-                    fiber: item.fiber,
-                },
-            }));
+            const items = nutritionItemsToFoodItems(data.items);
 
             setParsedItems(items);
             setStep('review');
         } catch (err) {
             setError('Something went wrong. Please try again.');
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePhotoSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+
+        if (!file) return;
+
+        setLoading(true);
+        setError('');
+
+        try {
+            const dataUrl = await resizeImageForAnalysis(file);
+            setPhotoPreview(dataUrl);
+            setPhotoName(file.name || 'Food photo');
+            setAnalysisMode('photo');
+        } catch (err) {
+            setError('Could not prepare that photo. Try another image or type the meal.');
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePhotoAnalyze = async () => {
+        if (!photoPreview) {
+            setError('Take or upload a photo first.');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+
+        try {
+            const response = await fetch('/api/nutrition', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageDataUrl: photoPreview }),
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to analyze photo');
+            }
+
+            if (data.error) {
+                setError(data.error);
+                return;
+            }
+
+            if (!Array.isArray(data.items) || data.items.length === 0) {
+                setError('I could not read that photo. Try another angle or type the meal.');
+                return;
+            }
+
+            setParsedItems(nutritionItemsToFoodItems(data.items));
+            setStep('review');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
             console.error(err);
         } finally {
             setLoading(false);
@@ -157,7 +281,17 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
 
     const handleQuickAdd = (text: string) => {
         setFoodText(text);
+        setAnalysisMode('text');
         setError('');
+    };
+
+    const handleAnalyzeClick = () => {
+        if (analysisMode === 'photo') {
+            void handlePhotoAnalyze();
+            return;
+        }
+
+        void handleAnalyze();
     };
 
     return (
@@ -190,7 +324,7 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto px-4 py-5">
+                <div className="smooth-scroll-panel flex-1 overflow-y-auto px-4 py-5">
                     {step === 'input' ? (
                         <div className="space-y-6">
                             <section>
@@ -198,7 +332,7 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                                     <h2 className="ink-title text-3xl font-black text-ink">
                                         {isEditing ? 'Update this plate' : 'What plate is this?'}
                                     </h2>
-                                    <p className="mt-1 text-sm font-semibold text-muted">Pick the meal, then type it naturally.</p>
+                                    <p className="mt-1 text-sm font-semibold text-muted">Pick the meal, then type it or use a photo.</p>
                                 </div>
                                 <div className="grid grid-cols-4 gap-2">
                                     {mealTypes.map((type) => (
@@ -221,44 +355,136 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                             </section>
 
                             <section>
-                                <label className="mb-2 block text-sm font-black text-ink" htmlFor="foodText">
-                                    Food eaten
-                                </label>
-                                <textarea
-                                    id="foodText"
-                                    value={foodText}
-                                    onChange={(event) => {
-                                        setFoodText(event.target.value);
-                                        setError('');
-                                    }}
-                                    placeholder="Example: 2 roti, dal, rice, paneer, salad"
-                                    rows={5}
-                                    className="input-field resize-none"
-                                />
-                                <p className="mt-2 text-xs font-bold text-muted">English and Hinglish both work. Quantities help a lot.</p>
+                                <div className="grid grid-cols-2 gap-2" aria-label="Meal input method">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setAnalysisMode('text');
+                                            setError('');
+                                        }}
+                                        className={`tap-scale rounded-lg border p-3 text-left ${analysisMode === 'text'
+                                            ? 'border-brand bg-brand-soft text-brand-strong'
+                                            : 'border-line bg-white text-ink-soft'
+                                            }`}
+                                        aria-pressed={analysisMode === 'text'}
+                                    >
+                                        <span className="block text-sm font-black">Type meal</span>
+                                        <span className="mt-1 block text-xs font-bold text-muted">Fast and exact</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setAnalysisMode('photo');
+                                            setError('');
+                                        }}
+                                        className={`tap-scale rounded-lg border p-3 text-left ${analysisMode === 'photo'
+                                            ? 'border-brand bg-brand-soft text-brand-strong'
+                                            : 'border-line bg-white text-ink-soft'
+                                            }`}
+                                        aria-pressed={analysisMode === 'photo'}
+                                    >
+                                        <span className="block text-sm font-black">Use photo</span>
+                                        <span className="mt-1 block text-xs font-bold text-muted">Camera estimate</span>
+                                    </button>
+                                </div>
                             </section>
 
-                            <section>
-                                <div className="mb-3 flex items-baseline justify-between gap-3">
-                                    <h2 className="text-base font-black text-ink">Quick plates</h2>
-                                    <p className="text-xs font-bold text-muted">{getMealLabel(mealType)}</p>
-                                </div>
-                                <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2">
-                                    {quickAddSuggestions[mealType].map((suggestion) => (
-                                        <button
-                                            type="button"
-                                            key={suggestion}
-                                            onClick={() => handleQuickAdd(suggestion)}
-                                            className={`tap-scale min-h-11 shrink-0 snap-start rounded-lg border px-3 text-sm font-bold ${foodText === suggestion
-                                                ? 'border-brand bg-brand-soft text-brand-strong'
-                                                : 'border-line bg-white text-ink-soft'
-                                                }`}
-                                        >
-                                            {suggestion}
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
+                            {analysisMode === 'text' ? (
+                                <>
+                                    <section>
+                                        <label className="mb-2 block text-sm font-black text-ink" htmlFor="foodText">
+                                            Food eaten
+                                        </label>
+                                        <textarea
+                                            id="foodText"
+                                            value={foodText}
+                                            onChange={(event) => {
+                                                setFoodText(event.target.value);
+                                                setAnalysisMode('text');
+                                                setError('');
+                                            }}
+                                            placeholder="Example: 2 roti, dal, rice, paneer, salad"
+                                            rows={5}
+                                            className="input-field resize-none"
+                                        />
+                                        <p className="mt-2 text-xs font-bold text-muted">English and Hinglish both work. Quantities help a lot.</p>
+                                    </section>
+
+                                    <section>
+                                        <div className="mb-3 flex items-baseline justify-between gap-3">
+                                            <h2 className="text-base font-black text-ink">Quick plates</h2>
+                                            <p className="text-xs font-bold text-muted">{getMealLabel(mealType)}</p>
+                                        </div>
+                                        <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2">
+                                            {quickAddSuggestions[mealType].map((suggestion) => (
+                                                <button
+                                                    type="button"
+                                                    key={suggestion}
+                                                    onClick={() => handleQuickAdd(suggestion)}
+                                                    className={`tap-scale min-h-11 shrink-0 snap-start rounded-lg border px-3 text-sm font-bold ${foodText === suggestion
+                                                        ? 'border-brand bg-brand-soft text-brand-strong'
+                                                        : 'border-line bg-white text-ink-soft'
+                                                        }`}
+                                                >
+                                                    {suggestion}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </section>
+                                </>
+                            ) : (
+                                <section>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/jpg,image/webp,image/*"
+                                        capture="environment"
+                                        className="sr-only"
+                                        onChange={handlePhotoSelected}
+                                    />
+                                    <div className="surface-quiet rounded-lg p-3">
+                                        {photoPreview ? (
+                                            <div className="space-y-3">
+                                                <Image
+                                                    src={photoPreview}
+                                                    alt="Selected meal"
+                                                    width={640}
+                                                    height={480}
+                                                    unoptimized
+                                                    className="aspect-[4/3] w-full rounded-lg border border-line object-cover"
+                                                />
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <h2 className="truncate text-base font-black text-ink">{photoName || 'Food photo'}</h2>
+                                                        <p className="mt-1 text-xs font-bold text-muted">Review the estimate before saving.</p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => fileInputRef.current?.click()}
+                                                        className="secondary-button tap-scale min-h-10 shrink-0 px-3 text-sm"
+                                                    >
+                                                        Change
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="tap-scale flex min-h-[168px] w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-white/80 p-4 text-center text-ink-soft"
+                                            >
+                                                <svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-1.5-2Z" />
+                                                    <circle cx="12" cy="12.5" r="3.2" />
+                                                </svg>
+                                                <span className="mt-3 block text-base font-black text-ink">Take or upload photo</span>
+                                                <span className="mt-1 block text-xs font-bold text-muted">Clear light works best.</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="mt-2 text-xs font-bold text-muted">Only nutrition values are saved. The photo is not stored.</p>
+                                </section>
+                            )}
 
                             {error && (
                                 <div className="rounded-lg border border-danger/30 bg-chili-soft p-3 text-sm font-bold text-danger">
@@ -327,8 +553,8 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                     {step === 'input' ? (
                         <button
                             type="button"
-                            onClick={handleAnalyze}
-                            disabled={!foodText.trim() || loading}
+                            onClick={handleAnalyzeClick}
+                            disabled={footerAnalyzeDisabled}
                             className="primary-button tap-scale flex w-full items-center justify-center gap-2"
                         >
                             {loading && (
@@ -337,7 +563,9 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4Z" />
                                 </svg>
                             )}
-                            {loading ? 'Analyzing meal' : 'Analyze nutrition'}
+                            {loading
+                                ? analysisMode === 'photo' ? 'Analyzing photo' : 'Analyzing meal'
+                                : analysisMode === 'photo' ? 'Analyze photo' : 'Analyze nutrition'}
                         </button>
                     ) : (
                         <button

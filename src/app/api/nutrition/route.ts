@@ -1,22 +1,94 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = 'gpt-4o-mini';
+const MAX_IMAGE_DATA_URL_LENGTH = 5_000_000;
+
+interface NutritionResponseItem {
+    name: string;
+    quantity: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber: number;
+}
+
+interface NutritionApiResult {
+    items: NutritionResponseItem[];
+}
+
+const IMAGE_SYSTEM_PROMPT = `You are a nutrition expert specializing in Indian and global food. Analyze the food photo and estimate nutrition for the visible edible items.
+
+Return ONLY a JSON array of objects with these fields:
+- name: food item name (string)
+- quantity: visible estimated quantity with unit (string)
+- calories: total kcal (number)
+- protein: grams (number)
+- carbs: grams (number)
+- fat: grams (number)
+- fiber: grams (number)
+
+Rules:
+- Estimate practical serving portions from the image; use "estimated" in the quantity when needed.
+- If multiple foods are visible, return one object per food item.
+- Do not include plates, utensils, hands, packaging, or non-food objects.
+- Do not invent hidden ingredients. Account for typical oil/ghee only when the food visibly or normally contains it.
+- If you cannot identify any food, return [].
+- Return ONLY valid JSON array, no markdown, no explanation.`;
 
 export async function POST(req: NextRequest) {
     try {
-        if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your_openai_api_key_here') {
-            // Fallback: use the Indian food database
-            const { foodText } = await req.json();
-            return NextResponse.json(await getFallbackNutrition(foodText));
+        const body = await req.json().catch(() => null) as {
+            foodText?: unknown;
+            imageDataUrl?: unknown;
+        } | null;
+
+        if (!body || typeof body !== 'object') {
+            return NextResponse.json(
+                { error: 'Please provide a meal to analyze' },
+                { status: 400 }
+            );
         }
 
-        const { foodText } = await req.json();
+        const foodText = typeof body.foodText === 'string' ? body.foodText.trim() : '';
+        const imageDataUrl = typeof body.imageDataUrl === 'string' ? body.imageDataUrl.trim() : '';
+
+        if (imageDataUrl) {
+            const imageError = validateImageDataUrl(imageDataUrl);
+            if (imageError) {
+                return NextResponse.json({ error: imageError }, { status: 400 });
+            }
+
+            if (!hasUsableOpenAiKey()) {
+                return NextResponse.json(
+                    { error: 'Photo analysis needs OpenAI. Please type the meal instead.' },
+                    { status: 503 }
+                );
+            }
+
+            try {
+                const items = await analyzeImageWithOpenAi(imageDataUrl);
+                return NextResponse.json({ items });
+            } catch (error) {
+                console.error('OpenAI image nutrition error:', error);
+                return NextResponse.json(
+                    { error: 'I could not read that photo. Try another angle or type the meal.' },
+                    { status: 502 }
+                );
+            }
+        }
 
         if (!foodText || typeof foodText !== 'string') {
             return NextResponse.json(
                 { error: 'Please provide food items text' },
                 { status: 400 }
             );
+        }
+
+        if (!hasUsableOpenAiKey()) {
+            // Fallback: use the Indian food database
+            return NextResponse.json(await getFallbackNutrition(foodText));
         }
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -26,7 +98,7 @@ export async function POST(req: NextRequest) {
                 Authorization: `Bearer ${OPENAI_API_KEY}`,
             },
             body: JSON.stringify({
-                model: 'gpt-4o-mini',
+                model: OPENAI_MODEL,
                 messages: [
                     {
                         role: 'system',
@@ -101,6 +173,105 @@ Return ONLY valid JSON array, no markdown, no explanation.`,
             { status: 500 }
         );
     }
+}
+
+function hasUsableOpenAiKey() {
+    return Boolean(OPENAI_API_KEY && OPENAI_API_KEY !== 'your_openai_api_key_here');
+}
+
+function validateImageDataUrl(imageDataUrl: string) {
+    if (imageDataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+        return 'Photo is too large. Please try a smaller photo.';
+    }
+
+    if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(imageDataUrl)) {
+        return 'Please upload a PNG, JPG, JPEG, or WEBP photo.';
+    }
+
+    return '';
+}
+
+async function analyzeImageWithOpenAi(imageDataUrl: string): Promise<NutritionResponseItem[]> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+            model: OPENAI_MODEL,
+            messages: [
+                {
+                    role: 'system',
+                    content: IMAGE_SYSTEM_PROMPT,
+                },
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'text',
+                            text: 'Estimate nutrition for the visible food in this photo. The user will review before saving.',
+                        },
+                        {
+                            type: 'image_url',
+                            image_url: {
+                                url: imageDataUrl,
+                                detail: 'low',
+                            },
+                        },
+                    ],
+                },
+            ],
+            temperature: 0.2,
+            max_tokens: 650,
+        }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('OpenAI image API error:', errorData);
+        throw new Error('OpenAI image request failed');
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '[]';
+    return formatNutritionItems(parseOpenAiJson(content));
+}
+
+function parseOpenAiJson(content: string) {
+    const cleaned = content.replace(/```json\s*|\s*```/g, '').trim();
+
+    try {
+        return JSON.parse(cleaned);
+    } catch {
+        const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+
+        if (arrayMatch) {
+            return JSON.parse(arrayMatch[0]);
+        }
+
+        console.error('Failed to parse GPT response:', content);
+        throw new Error('OpenAI returned invalid JSON');
+    }
+}
+
+function formatNutritionItems(items: unknown): NutritionResponseItem[] {
+    const candidate = items && typeof items === 'object' && !Array.isArray(items) && 'items' in items
+        ? (items as { items?: unknown }).items
+        : items;
+    const list = Array.isArray(candidate) ? candidate : [candidate];
+
+    return list
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        .map((item) => ({
+            name: String(item.name || 'Unknown food'),
+            quantity: String(item.quantity || '1 serving'),
+            calories: Math.round(Number(item.calories) || 0),
+            protein: Math.round(Number(item.protein) || 0),
+            carbs: Math.round(Number(item.carbs) || 0),
+            fat: Math.round(Number(item.fat) || 0),
+            fiber: Math.round(Number(item.fiber) || 0),
+        }));
 }
 
 // Extensive Indian food database for fallback
@@ -261,17 +432,7 @@ const indianFoodDB: Record<string, FoodData> = {
 /**
  * Fallback nutrition lookup using local Indian food database
  */
-async function getFallbackNutrition(foodText: string): Promise<{
-    items: Array<{
-        name: string;
-        quantity: string;
-        calories: number;
-        protein: number;
-        carbs: number;
-        fat: number;
-        fiber: number;
-    }>
-}> {
+async function getFallbackNutrition(foodText: string): Promise<NutritionApiResult> {
     const text = foodText.toLowerCase().trim();
 
     // Try to parse items like "2 eggs, 1 banana, 1 protein scoop"

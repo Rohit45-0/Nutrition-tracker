@@ -112,6 +112,12 @@ input[type="number"] {
   min-height: 100dvh;
   margin: 0 auto;
   position: relative;
+  overflow-x: hidden;
+}
+
+.smooth-scroll-panel {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .screen {
