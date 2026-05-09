@@ -64,8 +64,7 @@ export default function History({ logs, targets, startDate }: Props) {
                                     className={`h-10 rounded-lg border ${pct >= 80 && pct <= 120
                                         ? 'border-brand/30 bg-brand-soft'
                                         : pct > 120
-                                            ? 'border-danger/30 bg-chili-soft'
-                                            : 'border-warning/30 bg-saffron-soft'
+                                            ? 'border-danger/30 bg-chili-soft' :'border-warning/30 bg-saffron-soft'
                                         }`}
                                     title={`${log.date}: ${log.totalNutrition.calories} kcal`}
                                 />

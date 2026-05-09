@@ -194,13 +194,11 @@ export default function ProfileSetup({ onComplete, existingProfile, accountName,
                                     key={item.value}
                                     onClick={() => setGoal(item.value)}
                                     className={`tap-scale flex w-full items-center gap-3 rounded-lg border p-4 text-left ${goal === item.value
-                                        ? 'border-brand bg-brand-soft'
-                                        : 'border-line bg-white'
+                                        ? 'border-brand bg-brand-soft' :'border-line bg-white'
                                         }`}
                                 >
                                     <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg text-xs font-black ${goal === item.value
-                                        ? 'bg-brand text-white'
-                                        : 'bg-page text-brand-strong'
+                                        ? 'bg-brand text-white' :'bg-page text-brand-strong'
                                         }`}>
                                         {item.marker}
                                     </span>
@@ -222,8 +220,7 @@ export default function ProfileSetup({ onComplete, existingProfile, accountName,
                                     key={item.value}
                                     onClick={() => setActivityLevel(item.value)}
                                     className={`tap-scale w-full rounded-lg border p-4 text-left ${activityLevel === item.value
-                                        ? 'border-brand bg-brand-soft'
-                                        : 'border-line bg-white'
+                                        ? 'border-brand bg-brand-soft' :'border-line bg-white'
                                         }`}
                                 >
                                     <span className="block text-base font-black text-ink">{item.label}</span>
@@ -322,8 +319,7 @@ function ChoiceButton({ active, onClick, children }: { active: boolean; onClick:
             type="button"
             onClick={onClick}
             className={`tap-scale min-h-12 rounded-lg border text-sm font-black ${active
-                ? 'border-brand bg-brand text-white'
-                : 'border-line bg-white text-ink-soft'
+                ? 'border-brand bg-brand text-white' :'border-line bg-white text-ink-soft'
                 }`}
         >
             {children}

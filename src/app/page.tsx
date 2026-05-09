@@ -19,6 +19,9 @@ import AddMeal from '@/components/AddMeal';
 import History from '@/components/History';
 import Settings from '@/components/Settings';
 import BottomNav from '@/components/BottomNav';
+import ProgressScreen from '@/components/ProgressScreen';
+import { WorkoutEntry } from '@/components/WorkoutLog';
+import { WeightEntry } from '@/components/ProgressTracker';
 
 function mergeTodayLogIntoRecentLogs(log: DayLog, previousLogs: DayLog[]) {
   const shouldKeep =
@@ -49,6 +52,16 @@ export default function Home() {
   const [editingMeal, setEditingMeal] = useState<MealEntry | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Workout state
+  const [workouts, setWorkouts] = useState<WorkoutEntry[]>([]);
+  const [workoutsLoaded, setWorkoutsLoaded] = useState(false);
+
+  // Weight/progress state
+  const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
+  const [weightLoaded, setWeightLoaded] = useState(false);
+
+  const [progressLoading, setProgressLoading] = useState(false);
 
   const applyBootstrap = useCallback((bootstrap: AppBootstrap) => {
     setUser(bootstrap.user);
@@ -86,6 +99,40 @@ export default function Home() {
   useEffect(() => {
     void loadApp();
   }, [loadApp]);
+
+  // Load progress data when tab is active
+  const loadProgressData = useCallback(async (userId: string) => {
+    setProgressLoading(true);
+    try {
+      const [workoutsRes, weightRes] = await Promise.all([
+        fetch(`/api/workouts?userId=${userId}`),
+        fetch(`/api/weight?userId=${userId}`),
+      ]);
+
+      if (workoutsRes.ok) {
+        const data = await workoutsRes.json();
+        setWorkouts(data.workouts || []);
+        setWorkoutsLoaded(true);
+      }
+
+      if (weightRes.ok) {
+        const data = await weightRes.json();
+        setWeightEntries(data.entries || []);
+        setWeightLoaded(true);
+      }
+    } catch (err) {
+      console.error('Failed to load progress data:', err);
+    } finally {
+      setProgressLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab === 'progress' && !workoutsLoaded && !weightLoaded && !progressLoading) {
+      void loadProgressData(user.id);
+    }
+  }, [activeTab, user, workoutsLoaded, weightLoaded, progressLoading, loadProgressData]);
 
   const syncTodayState = useCallback((nextLog: DayLog, nextTotalDays: number) => {
     setTodayLog(nextLog);
@@ -159,6 +206,55 @@ export default function Home() {
     setShowAddMeal(false);
     setEditingMeal(null);
     setActiveTab('home');
+    setWorkouts([]);
+    setWeightEntries([]);
+    setWorkoutsLoaded(false);
+    setWeightLoaded(false);
+  }, []);
+
+  // Workout handlers
+  const handleAddWorkout = useCallback(async (workout: Omit<WorkoutEntry, 'id'>) => {
+    if (!user) return;
+    const res = await fetch('/api/workouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, workout }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setWorkouts((prev) => [data.workout, ...prev]);
+    }
+  }, [user]);
+
+  const handleDeleteWorkout = useCallback(async (id: string) => {
+    const res = await fetch(`/api/workouts/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setWorkouts((prev) => prev.filter((w) => w.id !== id));
+    }
+  }, []);
+
+  // Weight handlers
+  const handleAddWeight = useCallback(async (entry: { date: string; weightKg: number; notes: string }) => {
+    if (!user) return;
+    const res = await fetch('/api/weight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, entry }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setWeightEntries((prev) => {
+        const filtered = prev.filter((e) => e.date !== entry.date);
+        return [data.entry, ...filtered].sort((a, b) => b.date.localeCompare(a.date));
+      });
+    }
+  }, [user]);
+
+  const handleDeleteWeight = useCallback(async (id: string) => {
+    const res = await fetch(`/api/weight/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setWeightEntries((prev) => prev.filter((e) => e.id !== id));
+    }
   }, []);
 
   const dayNumber = useMemo(() => {
@@ -230,6 +326,24 @@ export default function Home() {
           targets={targets}
           startDate={profile.createdAt.split('T')[0]}
         />
+      )}
+
+      {activeTab === 'progress' && (
+        progressLoading ? (
+          <div className="screen flex items-center justify-center">
+            <p className="text-sm font-bold text-muted">Loading...</p>
+          </div>
+        ) : (
+          <ProgressScreen
+            workouts={workouts}
+            weightEntries={weightEntries}
+            startWeight={profile.weight}
+            onAddWorkout={handleAddWorkout}
+            onDeleteWorkout={handleDeleteWorkout}
+            onAddWeight={handleAddWeight}
+            onDeleteWeight={handleDeleteWeight}
+          />
+        )
       )}
 
       {activeTab === 'settings' && targets && (
