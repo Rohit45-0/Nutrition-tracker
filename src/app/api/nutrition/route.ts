@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
             }
 
             try {
-                const items = await analyzeImageWithOpenAi(imageDataUrl);
+                let items = await analyzeImageWithOpenAi(imageDataUrl);
                 return NextResponse.json({ items });
             } catch (error) {
                 console.error('OpenAI image nutrition error:', error);
@@ -438,7 +438,7 @@ async function getFallbackNutrition(foodText: string): Promise<NutritionApiResul
     // Try to parse items like "2 eggs, 1 banana, 1 protein scoop"
     const parts = text.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
 
-    const items = parts.map((part) => {
+    let items = parts.map((part) => {
         // Extract quantity number
         const numMatch = part.match(/^(\d+\.?\d*)\s+/);
         const qty = numMatch ? parseFloat(numMatch[1]) : 1;

@@ -93,8 +93,7 @@ function NavButton({
             type="button"
             onClick={onClick}
             className={`tap-scale flex h-14 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-black ${active
-                ? 'bg-brand-soft text-brand-strong'
-                : 'text-muted'
+                ? 'bg-brand-soft text-brand-strong' :'text-muted'
                 }`}
             aria-current={active ? 'page' : undefined}
         >

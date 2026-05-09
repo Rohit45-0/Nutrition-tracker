@@ -247,8 +247,7 @@ export default function Dashboard({
 
                     <div className="min-w-0 space-y-3">
                         <p className={`rounded-lg px-3 py-2 text-sm font-black ${calRemaining >= 0
-                            ? 'bg-brand-soft text-brand-strong'
-                            : 'bg-chili-soft text-danger'
+                            ? 'bg-brand-soft text-brand-strong' :'bg-chili-soft text-danger'
                             }`}>
                             {calRemaining >= 0
                                 ? `${calRemaining} kcal left`

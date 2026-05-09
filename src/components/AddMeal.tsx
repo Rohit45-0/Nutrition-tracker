@@ -362,9 +362,7 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                                             setAnalysisMode('text');
                                             setError('');
                                         }}
-                                        className={`tap-scale rounded-lg border p-3 text-left ${analysisMode === 'text'
-                                            ? 'border-brand bg-brand-soft text-brand-strong'
-                                            : 'border-line bg-white text-ink-soft'
+                                        className={`tap-scale rounded-lg border p-3 text-left ${analysisMode === 'text' ?'border-brand bg-brand-soft text-brand-strong' :'border-line bg-white text-ink-soft'
                                             }`}
                                         aria-pressed={analysisMode === 'text'}
                                     >
@@ -377,9 +375,7 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                                             setAnalysisMode('photo');
                                             setError('');
                                         }}
-                                        className={`tap-scale rounded-lg border p-3 text-left ${analysisMode === 'photo'
-                                            ? 'border-brand bg-brand-soft text-brand-strong'
-                                            : 'border-line bg-white text-ink-soft'
+                                        className={`tap-scale rounded-lg border p-3 text-left ${analysisMode === 'photo' ?'border-brand bg-brand-soft text-brand-strong' :'border-line bg-white text-ink-soft'
                                             }`}
                                         aria-pressed={analysisMode === 'photo'}
                                     >
@@ -422,8 +418,7 @@ export default function AddMeal({ onSave, onClose, initialMeal }: Props) {
                                                     key={suggestion}
                                                     onClick={() => handleQuickAdd(suggestion)}
                                                     className={`tap-scale min-h-11 shrink-0 snap-start rounded-lg border px-3 text-sm font-bold ${foodText === suggestion
-                                                        ? 'border-brand bg-brand-soft text-brand-strong'
-                                                        : 'border-line bg-white text-ink-soft'
+                                                        ? 'border-brand bg-brand-soft text-brand-strong' :'border-line bg-white text-ink-soft'
                                                         }`}
                                                 >
                                                     {suggestion}
