@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { Pool, type QueryResultRow } from 'pg';
+import { Pool } from 'pg';
+import type { QueryResultRow } from 'pg';
 import { DayLog, MealEntry, NutritionInfo, UserProfile, AuthUser, AppBootstrap } from './types';
 import { sumNutrition } from './nutrition';
 
