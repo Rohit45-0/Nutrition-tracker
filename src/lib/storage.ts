@@ -1,4 +1,4 @@
-import { AppBootstrap, DayLog, MealEntry, UserProfile, AuthUser } from './types';
+import { AppBootstrap, DayLog, MealEntry, UserProfile, AuthUser, WorkoutEntry, WeightEntry } from './types';
 
 export class ApiError extends Error {
     status: number;
@@ -63,6 +63,22 @@ interface DayLogMutationResponse {
     totalDays: number;
 }
 
+interface WorkoutsResponse {
+    workouts: WorkoutEntry[];
+}
+
+interface WorkoutResponse {
+    workout: WorkoutEntry;
+}
+
+interface WeightEntriesResponse {
+    entries: WeightEntry[];
+}
+
+interface WeightEntryResponse {
+    entry: WeightEntry;
+}
+
 export async function getBootstrapData(date: string, days = 30) {
     return request<AppBootstrap>(`/api/app/bootstrap?date=${date}&days=${days}`);
 }
@@ -119,5 +135,39 @@ export async function updateWater(waterGlasses: number, date: string) {
     return request<DayLogMutationResponse>('/api/water', {
         method: 'PUT',
         body: JSON.stringify({ waterGlasses, date }),
+    });
+}
+
+export async function getWorkoutLogs(date: string, days = 90) {
+    return request<WorkoutsResponse>(`/api/workouts?date=${date}&days=${days}`);
+}
+
+export async function addWorkout(workout: Omit<WorkoutEntry, 'id'>) {
+    return request<WorkoutResponse>('/api/workouts', {
+        method: 'POST',
+        body: JSON.stringify({ workout }),
+    });
+}
+
+export async function deleteWorkout(workoutId: string) {
+    return request<{ success: boolean }>(`/api/workouts/${encodeURIComponent(workoutId)}`, {
+        method: 'DELETE',
+    });
+}
+
+export async function getWeightEntries(date: string, days = 90) {
+    return request<WeightEntriesResponse>(`/api/weight?date=${date}&days=${days}`);
+}
+
+export async function saveWeightEntry(entry: Omit<WeightEntry, 'id'>) {
+    return request<WeightEntryResponse>('/api/weight', {
+        method: 'POST',
+        body: JSON.stringify({ entry }),
+    });
+}
+
+export async function deleteWeightEntry(entryId: string) {
+    return request<{ success: boolean }>(`/api/weight/${encodeURIComponent(entryId)}`, {
+        method: 'DELETE',
     });
 }

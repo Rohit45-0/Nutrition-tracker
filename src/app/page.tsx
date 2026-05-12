@@ -1,13 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppBootstrap, AuthUser, DayLog, DailyTargets, MealEntry, UserProfile } from '@/lib/types';
+import { AppBootstrap, AuthUser, DayLog, DailyTargets, MealEntry, UserProfile, WorkoutEntry, WeightEntry } from '@/lib/types';
 import { calculateDailyTargets, getDayNumber, getTodayDate } from '@/lib/nutrition';
 import {
   addMealToLog,
+  addWorkout,
   deleteMealFromLog,
+  deleteWeightEntry,
+  deleteWorkout,
   getBootstrapData,
+  getWeightEntries,
+  getWorkoutLogs,
   saveProfile,
+  saveWeightEntry,
   signOut,
   updateMealInLog,
   updateWater,
@@ -19,6 +25,7 @@ import AddMeal from '@/components/AddMeal';
 import History from '@/components/History';
 import Settings from '@/components/Settings';
 import BottomNav from '@/components/BottomNav';
+import ProgressScreen from '@/components/ProgressScreen';
 
 function mergeTodayLogIntoRecentLogs(log: DayLog, previousLogs: DayLog[]) {
   const shouldKeep =
@@ -49,6 +56,10 @@ export default function Home() {
   const [editingMeal, setEditingMeal] = useState<MealEntry | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [workouts, setWorkouts] = useState<WorkoutEntry[]>([]);
+  const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
 
   const applyBootstrap = useCallback((bootstrap: AppBootstrap) => {
     setUser(bootstrap.user);
@@ -86,6 +97,35 @@ export default function Home() {
   useEffect(() => {
     void loadApp();
   }, [loadApp]);
+
+  const loadProgressData = useCallback(async () => {
+    if (!user || progressLoading) {
+      return;
+    }
+
+    setProgressLoading(true);
+    try {
+      const today = getTodayDate();
+      const [workoutsResult, weightResult] = await Promise.all([
+        getWorkoutLogs(today, 90),
+        getWeightEntries(today, 90),
+      ]);
+
+      setWorkouts(workoutsResult.workouts);
+      setWeightEntries(weightResult.entries);
+      setProgressLoaded(true);
+    } catch (error) {
+      console.error('Failed to load progress data:', error);
+    } finally {
+      setProgressLoading(false);
+    }
+  }, [progressLoading, user]);
+
+  useEffect(() => {
+    if (activeTab === 'progress' && user && !progressLoaded && !progressLoading) {
+      void loadProgressData();
+    }
+  }, [activeTab, loadProgressData, progressLoaded, progressLoading, user]);
 
   const syncTodayState = useCallback((nextLog: DayLog, nextTotalDays: number) => {
     setTodayLog(nextLog);
@@ -159,6 +199,35 @@ export default function Home() {
     setShowAddMeal(false);
     setEditingMeal(null);
     setActiveTab('home');
+    setWorkouts([]);
+    setWeightEntries([]);
+    setProgressLoaded(false);
+    setProgressLoading(false);
+  }, []);
+
+  const handleAddWorkout = useCallback(async (workout: Omit<WorkoutEntry, 'id'>) => {
+    const result = await addWorkout(workout);
+    setWorkouts((previous) => [result.workout, ...previous]);
+    setProgressLoaded(true);
+  }, []);
+
+  const handleDeleteWorkout = useCallback(async (workoutId: string) => {
+    await deleteWorkout(workoutId);
+    setWorkouts((previous) => previous.filter((workout) => workout.id !== workoutId));
+  }, []);
+
+  const handleAddWeight = useCallback(async (entry: Omit<WeightEntry, 'id'>) => {
+    const result = await saveWeightEntry(entry);
+    setWeightEntries((previous) => {
+      const filtered = previous.filter((item) => item.date !== result.entry.date);
+      return [result.entry, ...filtered].sort((a, b) => b.date.localeCompare(a.date));
+    });
+    setProgressLoaded(true);
+  }, []);
+
+  const handleDeleteWeight = useCallback(async (entryId: string) => {
+    await deleteWeightEntry(entryId);
+    setWeightEntries((previous) => previous.filter((entry) => entry.id !== entryId));
   }, []);
 
   const dayNumber = useMemo(() => {
@@ -230,6 +299,24 @@ export default function Home() {
           targets={targets}
           startDate={profile.createdAt.split('T')[0]}
         />
+      )}
+
+      {activeTab === 'progress' && (
+        progressLoading ? (
+          <div className="screen flex items-center justify-center">
+            <p className="text-sm font-bold text-muted">Loading progress...</p>
+          </div>
+        ) : (
+          <ProgressScreen
+            workouts={workouts}
+            weightEntries={weightEntries}
+            startWeight={profile.weight}
+            onAddWorkout={handleAddWorkout}
+            onDeleteWorkout={handleDeleteWorkout}
+            onAddWeight={handleAddWeight}
+            onDeleteWeight={handleDeleteWeight}
+          />
+        )
       )}
 
       {activeTab === 'settings' && targets && (

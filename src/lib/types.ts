@@ -54,6 +54,32 @@ export interface AuthUser {
   createdAt: string;
 }
 
+export interface Exercise {
+  id: string;
+  name: string;
+  sets: number;
+  reps: number;
+  weightKg: number;
+  durationMinutes: number;
+}
+
+export interface WorkoutEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  category: 'strength' | 'cardio' | 'walking' | 'mobility' | 'custom';
+  durationMinutes: number;
+  notes: string;
+  exercises: Exercise[];
+}
+
+export interface WeightEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  weightKg: number;
+  notes: string;
+}
+
 export interface AppBootstrap {
   user: AuthUser | null;
   profile: UserProfile | null;
@@ -65,3 +91,4 @@ export interface AppBootstrap {
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type Goal = 'muscle_building' | 'weight_loss' | 'maintain';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+export type WorkoutCategory = WorkoutEntry['category'];

@@ -1,3 +1,7 @@
 .env
 .env.*
 !.env.example
+nutrition_tracker_rocket
+.npm-cache
+.tmp
+PRODUCT-README.md

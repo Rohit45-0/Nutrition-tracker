@@ -6,7 +6,7 @@ interface Props {
     onAddMeal: () => void;
 }
 
-const tabs = [
+const leftTabs = [
     {
         id: 'home',
         label: 'Today',
@@ -16,12 +16,25 @@ const tabs = [
     },
     {
         id: 'history',
-        label: 'History',
+        label: 'Nutrition',
         icon: (
             <>
                 <path d="M5 19V9" />
                 <path d="M12 19V5" />
                 <path d="M19 19v-7" />
+            </>
+        ),
+    },
+];
+
+const rightTabs = [
+    {
+        id: 'progress',
+        label: 'Progress',
+        icon: (
+            <>
+                <path d="M3 3v18h18" />
+                <path d="m19 9-5 5-4-4-3 3" />
             </>
         ),
     },
@@ -40,8 +53,8 @@ const tabs = [
 export default function BottomNav({ activeTab, onTabChange, onAddMeal }: Props) {
     return (
         <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-safe">
-            <div className="mx-auto grid max-w-[680px] grid-cols-[1fr_1fr_74px_1fr] items-end gap-2 rounded-lg border border-line-strong/70 bg-surface/95 p-2 shadow-[0_-16px_42px_rgba(36,76,57,0.16)] backdrop-blur">
-                {tabs.slice(0, 2).map((tab) => (
+            <div className="mx-auto grid max-w-[680px] grid-cols-[1fr_1fr_74px_1fr_1fr] items-end gap-1.5 rounded-lg border border-line-strong/70 bg-surface/95 p-2 shadow-[0_-16px_42px_rgba(36,76,57,0.16)] backdrop-blur">
+                {leftTabs.map((tab) => (
                     <NavButton
                         key={tab.id}
                         active={activeTab === tab.id}
@@ -65,13 +78,16 @@ export default function BottomNav({ activeTab, onTabChange, onAddMeal }: Props) 
                     <span className="mt-0.5 text-[11px] font-black">Log</span>
                 </button>
 
-                <NavButton
-                    active={activeTab === tabs[2].id}
-                    label={tabs[2].label}
-                    onClick={() => onTabChange(tabs[2].id)}
-                >
-                    {tabs[2].icon}
-                </NavButton>
+                {rightTabs.map((tab) => (
+                    <NavButton
+                        key={tab.id}
+                        active={activeTab === tab.id}
+                        label={tab.label}
+                        onClick={() => onTabChange(tab.id)}
+                    >
+                        {tab.icon}
+                    </NavButton>
+                ))}
             </div>
         </nav>
     );
@@ -92,13 +108,13 @@ function NavButton({
         <button
             type="button"
             onClick={onClick}
-            className={`tap-scale flex h-14 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-black ${active
+            className={`tap-scale flex h-14 flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-black ${active
                 ? 'bg-brand-soft text-brand-strong'
                 : 'text-muted'
                 }`}
             aria-current={active ? 'page' : undefined}
         >
-            <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                 {children}
             </svg>
             <span>{label}</span>

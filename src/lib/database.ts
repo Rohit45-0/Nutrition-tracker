@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Pool, type QueryResultRow } from 'pg';
-import { DayLog, MealEntry, NutritionInfo, UserProfile, AuthUser, AppBootstrap } from './types';
+import { DayLog, MealEntry, NutritionInfo, UserProfile, AuthUser, AppBootstrap, WorkoutEntry, WeightEntry } from './types';
 import { sumNutrition } from './nutrition';
 
 const scrypt = promisify(scryptCallback);
@@ -44,6 +44,27 @@ type DbDayLogRow = QueryResultRow & {
     water_glasses: number;
     meals: MealEntry[] | string;
     total_nutrition: NutritionInfo | string;
+};
+
+type DbWorkoutRow = QueryResultRow & {
+    id: string;
+    user_id: string;
+    date: Date | string;
+    name: string;
+    category: WorkoutEntry['category'];
+    duration_minutes: number;
+    notes: string | null;
+    exercises: WorkoutEntry['exercises'] | string;
+    created_at: Date | string;
+};
+
+type DbWeightLogRow = QueryResultRow & {
+    id: string;
+    user_id: string;
+    date: Date | string;
+    weight_kg: number | string;
+    notes: string | null;
+    created_at: Date | string;
 };
 
 declare global {
@@ -155,6 +176,44 @@ export async function ensureDatabaseReady() {
                 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
                 ON sessions (expires_at);
             `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS workouts (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    name TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('strength', 'cardio', 'walking', 'mobility', 'custom')),
+                    duration_minutes INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT,
+                    exercises JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_workouts_user_date
+                ON workouts (user_id, date DESC, created_at DESC);
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS weight_logs (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    weight_kg NUMERIC(5,1) NOT NULL,
+                    notes TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (user_id, date)
+                );
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_weight_logs_user_date
+                ON weight_logs (user_id, date DESC);
+            `);
         })().catch((error) => {
             globalThis.nutritrackSetupPromise = undefined;
             throw error;
@@ -221,6 +280,18 @@ function parseNutrition(value: NutritionInfo | string): NutritionInfo {
     return value ?? { ...ZERO_NUTRITION };
 }
 
+function parseExercises(value: WorkoutEntry['exercises'] | string) {
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value) as WorkoutEntry['exercises'];
+        } catch {
+            return [];
+        }
+    }
+
+    return Array.isArray(value) ? value : [];
+}
+
 function rowToAuthUser(row: DbUserRow): AuthUser {
     return {
         id: row.id,
@@ -249,6 +320,27 @@ function rowToDayLog(row: DbDayLogRow): DayLog {
         meals: parseMeals(row.meals),
         totalNutrition: parseNutrition(row.total_nutrition),
         waterGlasses: Number(row.water_glasses),
+    };
+}
+
+function rowToWorkout(row: DbWorkoutRow): WorkoutEntry {
+    return {
+        id: row.id,
+        date: normalizeDateValue(row.date),
+        name: row.name,
+        category: row.category,
+        durationMinutes: Number(row.duration_minutes),
+        notes: row.notes ?? '',
+        exercises: parseExercises(row.exercises),
+    };
+}
+
+function rowToWeightEntry(row: DbWeightLogRow): WeightEntry {
+    return {
+        id: row.id,
+        date: normalizeDateValue(row.date),
+        weightKg: Number(row.weight_kg),
+        notes: row.notes ?? '',
     };
 }
 
@@ -776,6 +868,149 @@ export async function updateWaterForUser(userId: string, date: string, waterGlas
         todayLog: savedLog,
         totalDays: await countStoredLogs(userId),
     };
+}
+
+export async function getWorkoutsForUser(userId: string, days: number, anchorDate: string) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const cutoff = new Date(`${anchorDate}T00:00:00`);
+    cutoff.setDate(cutoff.getDate() - Math.max(days - 1, 0));
+    const cutoffDate = cutoff.toISOString().slice(0, 10);
+
+    const result = await pool.query<DbWorkoutRow>(
+        `
+            SELECT id, user_id, date, name, category, duration_minutes, notes, exercises, created_at
+            FROM workouts
+            WHERE user_id = $1 AND date >= $2
+            ORDER BY date DESC, created_at DESC;
+        `,
+        [userId, cutoffDate]
+    );
+
+    return result.rows.map(rowToWorkout);
+}
+
+export async function addWorkoutForUser(userId: string, workout: Omit<WorkoutEntry, 'id'>) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const id = randomUUID();
+    const result = await pool.query<DbWorkoutRow>(
+        `
+            INSERT INTO workouts (
+                id,
+                user_id,
+                date,
+                name,
+                category,
+                duration_minutes,
+                notes,
+                exercises,
+                created_at,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW(), NOW())
+            RETURNING id, user_id, date, name, category, duration_minutes, notes, exercises, created_at;
+        `,
+        [
+            id,
+            userId,
+            workout.date,
+            workout.name,
+            workout.category,
+            workout.durationMinutes,
+            workout.notes,
+            JSON.stringify(workout.exercises),
+        ]
+    );
+
+    return rowToWorkout(result.rows[0]);
+}
+
+export async function deleteWorkoutForUser(userId: string, workoutId: string) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const result = await pool.query(
+        `
+            DELETE FROM workouts
+            WHERE id = $1 AND user_id = $2;
+        `,
+        [workoutId, userId]
+    );
+
+    return (result.rowCount ?? 0) > 0;
+}
+
+export async function getWeightEntriesForUser(userId: string, days: number, anchorDate: string) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const cutoff = new Date(`${anchorDate}T00:00:00`);
+    cutoff.setDate(cutoff.getDate() - Math.max(days - 1, 0));
+    const cutoffDate = cutoff.toISOString().slice(0, 10);
+
+    const result = await pool.query<DbWeightLogRow>(
+        `
+            SELECT id, user_id, date, weight_kg, notes, created_at
+            FROM weight_logs
+            WHERE user_id = $1 AND date >= $2
+            ORDER BY date DESC, created_at DESC;
+        `,
+        [userId, cutoffDate]
+    );
+
+    return result.rows.map(rowToWeightEntry);
+}
+
+export async function saveWeightEntryForUser(userId: string, entry: Omit<WeightEntry, 'id'>) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const existing = await pool.query<{ id: string }>(
+        `
+            SELECT id
+            FROM weight_logs
+            WHERE user_id = $1 AND date = $2
+            LIMIT 1;
+        `,
+        [userId, entry.date]
+    );
+    const id = existing.rows[0]?.id ?? randomUUID();
+
+    const result = await pool.query<DbWeightLogRow>(
+        `
+            INSERT INTO weight_logs (
+                id,
+                user_id,
+                date,
+                weight_kg,
+                notes,
+                created_at,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+            ON CONFLICT (user_id, date)
+            DO UPDATE SET
+                weight_kg = EXCLUDED.weight_kg,
+                notes = EXCLUDED.notes,
+                updated_at = NOW()
+            RETURNING id, user_id, date, weight_kg, notes, created_at;
+        `,
+        [id, userId, entry.date, entry.weightKg, entry.notes]
+    );
+
+    return rowToWeightEntry(result.rows[0]);
+}
+
+export async function deleteWeightEntryForUser(userId: string, entryId: string) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const result = await pool.query(
+        `
+            DELETE FROM weight_logs
+            WHERE id = $1 AND user_id = $2;
+        `,
+        [entryId, userId]
+    );
+
+    return (result.rowCount ?? 0) > 0;
 }
 
 export async function buildBootstrapForUser(userId: string, date: string, days: number): Promise<AppBootstrap> {
