@@ -6,6 +6,14 @@ export interface UserProfile {
   gender: 'male' | 'female';
   goal: 'muscle_building' | 'weight_loss' | 'maintain';
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
+  dietaryPreference: 'vegetarian' | 'eggetarian' | 'non_vegetarian' | 'vegan';
+  indianFoodPreference: 'north_indian' | 'south_indian' | 'mixed' | 'any';
+  dislikedFoods: string[];
+  dailyStepGoal: number;
+  dailyWaterGoal: number;
+  weeklyWorkoutGoal: number;
+  remindersEnabled: boolean;
+  reminderTime: string;
   createdAt: string;
 }
 
@@ -80,15 +88,45 @@ export interface WeightEntry {
   notes: string;
 }
 
+export interface StepEntry {
+  date: string; // YYYY-MM-DD
+  steps: number;
+  goal: number;
+  source: 'manual' | 'device' | 'imported';
+}
+
+export interface HabitLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  category: 'nutrition' | 'hydration' | 'movement' | 'recovery';
+  completed: boolean;
+  slot: number;
+}
+
+export interface WorkoutSummary {
+  date: string; // YYYY-MM-DD
+  todayCount: number;
+  todayMinutes: number;
+  weekCount: number;
+  weeklyGoal: number;
+}
+
 export interface AppBootstrap {
   user: AuthUser | null;
   profile: UserProfile | null;
   todayLog: DayLog | null;
   recentLogs: DayLog[];
   totalDays: number;
+  todaySteps: StepEntry | null;
+  todayHabits: HabitLog[];
+  todayWorkoutSummary: WorkoutSummary | null;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type Goal = 'muscle_building' | 'weight_loss' | 'maintain';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 export type WorkoutCategory = WorkoutEntry['category'];
+export type DietaryPreference = UserProfile['dietaryPreference'];
+export type IndianFoodPreference = UserProfile['indianFoodPreference'];
+export type HabitCategory = HabitLog['category'];

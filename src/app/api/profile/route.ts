@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { countStoredLogs, getTodayLogForUser, saveUserProfile } from '@/lib/database';
+import { countStoredLogs, getHabitsForUser, getStepEntryForUser, getTodayLogForUser, getWorkoutSummaryForUser, saveUserProfile } from '@/lib/database';
 import { getRequestSession, readDateString } from '@/lib/request';
 import { UserProfile } from '@/lib/types';
 
 export const runtime = 'nodejs';
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function isValidProfile(profile: Partial<UserProfile>): profile is UserProfile {
     return (
@@ -24,6 +25,32 @@ function isValidProfile(profile: Partial<UserProfile>): profile is UserProfile {
             profile.activityLevel === 'active' ||
             profile.activityLevel === 'very_active'
         ) &&
+        (
+            profile.dietaryPreference === 'vegetarian' ||
+            profile.dietaryPreference === 'eggetarian' ||
+            profile.dietaryPreference === 'non_vegetarian' ||
+            profile.dietaryPreference === 'vegan'
+        ) &&
+        (
+            profile.indianFoodPreference === 'north_indian' ||
+            profile.indianFoodPreference === 'south_indian' ||
+            profile.indianFoodPreference === 'mixed' ||
+            profile.indianFoodPreference === 'any'
+        ) &&
+        Array.isArray(profile.dislikedFoods) &&
+        profile.dislikedFoods.every((item) => typeof item === 'string') &&
+        Number.isFinite(profile.dailyStepGoal) &&
+        Number(profile.dailyStepGoal) >= 2000 &&
+        Number(profile.dailyStepGoal) <= 30000 &&
+        Number.isFinite(profile.dailyWaterGoal) &&
+        Number(profile.dailyWaterGoal) >= 4 &&
+        Number(profile.dailyWaterGoal) <= 12 &&
+        Number.isFinite(profile.weeklyWorkoutGoal) &&
+        Number(profile.weeklyWorkoutGoal) >= 1 &&
+        Number(profile.weeklyWorkoutGoal) <= 7 &&
+        typeof profile.remindersEnabled === 'boolean' &&
+        typeof profile.reminderTime === 'string' &&
+        TIME_PATTERN.test(profile.reminderTime) &&
         typeof profile.createdAt === 'string'
     );
 }
@@ -48,15 +75,21 @@ export async function PUT(request: NextRequest) {
         }
 
         const savedProfile = await saveUserProfile(session.user.id, profile);
-        const [todayLog, totalDays] = await Promise.all([
+        const [todayLog, totalDays, todaySteps, todayHabits, todayWorkoutSummary] = await Promise.all([
             getTodayLogForUser(session.user.id, date),
             countStoredLogs(session.user.id),
+            getStepEntryForUser(session.user.id, date, true),
+            getHabitsForUser(session.user.id, date),
+            getWorkoutSummaryForUser(session.user.id, date, savedProfile?.weeklyWorkoutGoal ?? 4),
         ]);
 
         return NextResponse.json({
             profile: savedProfile,
             todayLog,
             totalDays,
+            todaySteps,
+            todayHabits,
+            todayWorkoutSummary,
         });
     } catch (error) {
         console.error('Save profile error:', error);

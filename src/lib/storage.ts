@@ -1,4 +1,4 @@
-import { AppBootstrap, DayLog, MealEntry, UserProfile, AuthUser, WorkoutEntry, WeightEntry } from './types';
+import { AppBootstrap, AuthUser, DayLog, HabitLog, MealEntry, StepEntry, UserProfile, WorkoutEntry, WorkoutSummary, WeightEntry } from './types';
 
 export class ApiError extends Error {
     status: number;
@@ -56,6 +56,9 @@ interface ProfileResponse {
     profile: UserProfile | null;
     todayLog: DayLog;
     totalDays: number;
+    todaySteps: StepEntry | null;
+    todayHabits: HabitLog[];
+    todayWorkoutSummary: WorkoutSummary | null;
 }
 
 interface DayLogMutationResponse {
@@ -77,6 +80,14 @@ interface WeightEntriesResponse {
 
 interface WeightEntryResponse {
     entry: WeightEntry;
+}
+
+interface StepEntryResponse {
+    entry: StepEntry;
+}
+
+interface HabitsResponse {
+    habits: HabitLog[];
 }
 
 export async function getBootstrapData(date: string, days = 30) {
@@ -135,6 +146,20 @@ export async function updateWater(waterGlasses: number, date: string) {
     return request<DayLogMutationResponse>('/api/water', {
         method: 'PUT',
         body: JSON.stringify({ waterGlasses, date }),
+    });
+}
+
+export async function saveSteps(steps: number, date: string) {
+    return request<StepEntryResponse>('/api/steps', {
+        method: 'PUT',
+        body: JSON.stringify({ steps, date }),
+    });
+}
+
+export async function saveHabits(habits: HabitLog[], date: string) {
+    return request<HabitsResponse>('/api/habits', {
+        method: 'PUT',
+        body: JSON.stringify({ habits, date }),
     });
 }
 

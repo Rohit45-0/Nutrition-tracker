@@ -19,6 +19,9 @@ export async function GET(request: NextRequest) {
                 todayLog: null,
                 recentLogs: [],
                 totalDays: 0,
+                todaySteps: null,
+                todayHabits: [],
+                todayWorkoutSummary: null,
             });
         }
 

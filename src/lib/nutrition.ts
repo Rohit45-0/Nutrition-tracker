@@ -1,4 +1,4 @@
-import { UserProfile, DailyTargets, NutritionInfo, FoodItem } from './types';
+import { DailyTargets, FoodItem, HabitCategory, NutritionInfo, UserProfile } from './types';
 
 /**
  * Calculate BMR using Mifflin-St Jeor equation.
@@ -155,6 +155,132 @@ export function getGoalLabel(goal: string): string {
         maintain: 'Maintain weight',
     };
     return labels[goal] || goal;
+}
+
+export function getDietaryPreferenceLabel(preference: string): string {
+    const labels: Record<string, string> = {
+        vegetarian: 'Vegetarian',
+        eggetarian: 'Eggetarian',
+        non_vegetarian: 'Non-vegetarian',
+        vegan: 'Vegan',
+    };
+    return labels[preference] || preference;
+}
+
+export function getIndianFoodPreferenceLabel(preference: string): string {
+    const labels: Record<string, string> = {
+        north_indian: 'North Indian',
+        south_indian: 'South Indian',
+        mixed: 'Mixed Indian',
+        any: 'Any style',
+    };
+    return labels[preference] || preference;
+}
+
+function formatSteps(goal: number) {
+    if (goal >= 1000 && goal % 1000 === 0) {
+        return `${goal / 1000}k steps`;
+    }
+
+    return `${goal} steps`;
+}
+
+export function buildDietPlanSummary(profile: UserProfile, targets: DailyTargets) {
+    const plan: string[] = [];
+
+    if (profile.goal === 'muscle_building') {
+        plan.push(`Keep ${targets.protein}g protein spread across 3-4 meals so the surplus supports muscle instead of random snacking.`);
+    } else if (profile.goal === 'weight_loss') {
+        plan.push(`Start meals with protein and vegetables so the ${targets.calories} kcal target feels filling instead of restrictive.`);
+    } else {
+        plan.push(`Anchor each day around steady meals so ${targets.calories} kcal feels repeatable on busy weekdays.`);
+    }
+
+    if (profile.dietaryPreference === 'vegetarian') {
+        plan.push('Rotate paneer, curd, dal, soy, chana, rajma, and sprouts so carbs never land on the plate alone.');
+    } else if (profile.dietaryPreference === 'eggetarian') {
+        plan.push('Use eggs for an easy protein layer, then rotate paneer, curd, dal, soy, and chana through the week.');
+    } else if (profile.dietaryPreference === 'vegan') {
+        plan.push('Build meals with dal, chana, rajma, tofu, soy chunks, peanuts, and sprouts to keep protein practical.');
+    } else {
+        plan.push('Keep one easy protein ready each day: eggs, curd, paneer, chicken, fish, or a dal-based meal prep box.');
+    }
+
+    if (profile.indianFoodPreference === 'north_indian') {
+        plan.push('Bias toward roti, dal, sabzi, curd, paneer, kebab, or rajma-chawal style plates with protein first and oil under control.');
+    } else if (profile.indianFoodPreference === 'south_indian') {
+        plan.push('Use idli, dosa, upma, rice bowls, sambhar, curd rice, eggs, and podi add-ons to keep South Indian meals balanced.');
+    } else if (profile.indianFoodPreference === 'mixed') {
+        plan.push('Mix home-style North and South Indian plates so the app can suggest familiar meals without forcing one cuisine pattern.');
+    } else {
+        plan.push('Keep the meal database open to any Indian plate style so logging stays easy outside home too.');
+    }
+
+    if (profile.dislikedFoods.length > 0) {
+        plan.push(`Skip foods you avoid: ${profile.dislikedFoods.join(', ')}.`);
+    }
+
+    return plan.slice(0, 4);
+}
+
+export function buildWorkoutPlanSummary(profile: UserProfile) {
+    const plan: string[] = [];
+    const weeklyGoal = Math.max(profile.weeklyWorkoutGoal, 2);
+
+    if (profile.goal === 'muscle_building') {
+        plan.push(`Aim for ${weeklyGoal} gym sessions each week with a strength-first split and at least one rest or mobility day.`);
+    } else if (profile.goal === 'weight_loss') {
+        plan.push(`Aim for ${weeklyGoal} training days each week, mixing strength with walking or cardio so fat loss keeps muscle.`);
+    } else {
+        plan.push(`Aim for ${weeklyGoal} active sessions each week to keep maintenance structured instead of accidental.`);
+    }
+
+    if (profile.activityLevel === 'sedentary' || profile.activityLevel === 'light') {
+        plan.push(`Use ${formatSteps(profile.dailyStepGoal)} as the daily movement floor, even on non-training days.`);
+    } else {
+        plan.push(`Treat ${formatSteps(profile.dailyStepGoal)} as recovery movement, not extra punishment on hard training days.`);
+    }
+
+    if (profile.goal === 'muscle_building') {
+        plan.push('Prioritize progressive overload on compounds, then use walking and mobility to keep recovery moving.');
+    } else if (profile.goal === 'weight_loss') {
+        plan.push('Keep sessions short and repeatable: 35-55 minutes of lifting, plus walks after meals when possible.');
+    } else {
+        plan.push('Balance lifting, mobility, and easy cardio so energy stays high and the routine survives travel or social weeks.');
+    }
+
+    return plan;
+}
+
+export function buildDailyHabitBlueprints(profile: UserProfile): Array<{ name: string; category: HabitCategory }> {
+    const nutritionHabit =
+        profile.goal === 'muscle_building'
+            ? 'Hit protein in every main meal'
+            : profile.goal === 'weight_loss'
+                ? 'Build every plate around protein first'
+                : 'Keep meals balanced and logged honestly';
+
+    const recoveryHabit =
+        profile.goal === 'muscle_building'
+            ? 'Log training or mobility work'
+            : profile.goal === 'weight_loss'
+                ? 'Finish a post-meal walk'
+                : 'Keep a steady sleep window';
+
+    return [
+        { name: nutritionHabit, category: 'nutrition' },
+        { name: `Finish ${profile.dailyWaterGoal} glasses of water`, category: 'hydration' },
+        { name: `Reach ${formatSteps(profile.dailyStepGoal)}`, category: 'movement' },
+        { name: recoveryHabit, category: 'recovery' },
+    ];
+}
+
+export function getReminderSummary(profile: UserProfile) {
+    if (!profile.remindersEnabled) {
+        return 'Reminders are off.';
+    }
+
+    return `Daily reminder at ${profile.reminderTime}.`;
 }
 
 /**

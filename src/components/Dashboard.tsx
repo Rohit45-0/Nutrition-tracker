@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties, ReactNode } from 'react';
-import { UserProfile, DayLog, DailyTargets, MealEntry } from '@/lib/types';
+import { DailyTargets, DayLog, HabitLog, MealEntry, StepEntry, UserProfile, WorkoutSummary } from '@/lib/types';
 import {
     calcPercentage,
     getRemaining,
@@ -15,11 +15,17 @@ interface Props {
     todayLog: DayLog;
     targets: DailyTargets;
     dayNumber: number;
+    todaySteps: StepEntry;
+    todayHabits: HabitLog[];
+    todayWorkoutSummary: WorkoutSummary;
     onAddMeal: () => void;
     onEditMeal: (meal: MealEntry) => void;
     onDeleteMeal: (mealId: string) => void;
     onAddWater: () => void;
     onRemoveWater: () => void;
+    onUpdateSteps: (steps: number) => Promise<void> | void;
+    onToggleHabit: (habitId: string) => Promise<void> | void;
+    onOpenProgress: () => void;
 }
 
 function CircularProgress({
@@ -198,11 +204,17 @@ export default function Dashboard({
     todayLog,
     targets,
     dayNumber,
+    todaySteps,
+    todayHabits,
+    todayWorkoutSummary,
     onAddMeal,
     onEditMeal,
     onDeleteMeal,
     onAddWater,
     onRemoveWater,
+    onUpdateSteps,
+    onToggleHabit,
+    onOpenProgress,
 }: Props) {
     const calPct = calcPercentage(todayLog.totalNutrition.calories, targets.calories);
     const calRemaining = getRemaining(todayLog.totalNutrition.calories, targets.calories);
@@ -256,7 +268,7 @@ export default function Dashboard({
                         </p>
                         <div className="grid grid-cols-2 gap-2 text-sm">
                             <StatPill label="Meals" value={String(totalMeals)} />
-                            <StatPill label="Water" value={`${todayLog.waterGlasses}/8`} />
+                            <StatPill label="Water" value={`${todayLog.waterGlasses}/${profile.dailyWaterGoal}`} />
                         </div>
                     </div>
                 </div>
@@ -268,38 +280,126 @@ export default function Dashboard({
                 </div>
             </section>
 
-            <section className="surface-quiet animate-rise-in rounded-lg p-4" style={{ animationDelay: '160ms' }}>
+            <section className="animate-rise-in space-y-3" style={{ animationDelay: '160ms' }}>
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <h2 className="text-base font-black text-ink">Water</h2>
-                        <p className="text-sm font-semibold text-muted">{todayLog.waterGlasses} of 8 glasses</p>
+                        <h2 className="text-xl font-black text-ink">Daily summary</h2>
+                        <p className="text-sm font-semibold text-muted">Water, steps, workouts, and the habits that keep the day honest.</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={onRemoveWater}
-                            className="tap-scale grid h-11 w-11 place-items-center rounded-lg border border-line bg-white text-xl font-black text-ink-soft"
-                            aria-label="Remove water glass"
-                        >
-                            -
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onAddWater}
-                            className="tap-scale grid h-11 w-11 place-items-center rounded-lg bg-sky text-xl font-black text-white"
-                            aria-label="Add water glass"
-                        >
-                            +
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={onOpenProgress}
+                        className="secondary-button tap-scale min-h-11 shrink-0 px-3 text-sm"
+                    >
+                        Open progress
+                    </button>
                 </div>
-                <div className="mt-4 grid grid-cols-8 gap-1.5">
-                    {Array.from({ length: 8 }).map((_, index) => (
-                        <div
-                            key={index}
-                            className={`h-8 rounded ${index < todayLog.waterGlasses ? 'bg-sky' : 'bg-white border border-line'}`}
-                        />
-                    ))}
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                    <MiniSummaryCard
+                        label="Water"
+                        value={`${todayLog.waterGlasses}/${profile.dailyWaterGoal}`}
+                        note={`${Math.max(profile.dailyWaterGoal - todayLog.waterGlasses, 0)} glasses left`}
+                        current={todayLog.waterGlasses}
+                        target={profile.dailyWaterGoal}
+                        color="#2474bc"
+                    >
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={onRemoveWater}
+                                className="tap-scale grid h-10 w-10 place-items-center rounded-lg border border-line bg-white text-xl font-black text-ink-soft"
+                                aria-label="Remove water glass"
+                            >
+                                -
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onAddWater}
+                                className="tap-scale grid h-10 w-10 place-items-center rounded-lg bg-sky text-xl font-black text-white"
+                                aria-label="Add water glass"
+                            >
+                                +
+                            </button>
+                        </div>
+                    </MiniSummaryCard>
+
+                    <MiniSummaryCard
+                        label="Steps"
+                        value={formatCount(todaySteps.steps)}
+                        note={`Goal ${formatCount(todaySteps.goal)}`}
+                        current={todaySteps.steps}
+                        target={todaySteps.goal}
+                        color="#0b6b58"
+                    >
+                        <div className="grid grid-cols-3 gap-2 text-xs font-black">
+                            <QuickButton onClick={() => void onUpdateSteps(Math.max(todaySteps.steps - 500, 0))}>
+                                -500
+                            </QuickButton>
+                            <QuickButton onClick={() => void onUpdateSteps(todaySteps.steps + 500)}>
+                                +500
+                            </QuickButton>
+                            <QuickButton onClick={() => void onUpdateSteps(todaySteps.steps + 1000)}>
+                                +1k
+                            </QuickButton>
+                        </div>
+                    </MiniSummaryCard>
+
+                    <MiniSummaryCard
+                        label="Workout"
+                        value={todayWorkoutSummary.todayCount > 0 ? `${todayWorkoutSummary.todayMinutes} min` : 'Rest day'}
+                        note={`${todayWorkoutSummary.weekCount}/${todayWorkoutSummary.weeklyGoal} sessions this week`}
+                        current={Math.min(todayWorkoutSummary.todayCount, 1)}
+                        target={1}
+                        color="#f3b61f"
+                    >
+                        <button
+                            type="button"
+                            onClick={onOpenProgress}
+                            className="tap-scale w-full rounded-lg border border-line bg-white px-3 py-2 text-xs font-black text-ink-soft"
+                        >
+                            {todayWorkoutSummary.todayCount > 0 ? 'Review workout log' : 'Log workout'}
+                        </button>
+                    </MiniSummaryCard>
+                </div>
+
+                <div className="surface-quiet rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 className="text-base font-black text-ink">Today&apos;s habits</h2>
+                            <p className="text-sm font-semibold text-muted">Small wins that match your current goal.</p>
+                        </div>
+                        <span className="rounded-lg bg-white px-3 py-2 text-xs font-black text-brand-strong">
+                            {todayHabits.filter((habit) => habit.completed).length}/{todayHabits.length}
+                        </span>
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                        {todayHabits.map((habit) => (
+                            <button
+                                key={habit.id}
+                                type="button"
+                                onClick={() => void onToggleHabit(habit.id)}
+                                className={`tap-scale flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left ${habit.completed
+                                    ? 'border-brand bg-brand-soft'
+                                    : 'border-line bg-white'
+                                    }`}
+                            >
+                                <div className="min-w-0">
+                                    <p className="text-sm font-black text-ink">{habit.name}</p>
+                                    <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+                                        {habit.category}
+                                    </p>
+                                </div>
+                                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-md border text-sm font-black ${habit.completed
+                                    ? 'border-brand bg-brand text-white'
+                                    : 'border-line text-muted'
+                                    }`}>
+                                    {habit.completed ? 'OK' : ''}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </section>
 
@@ -377,4 +477,54 @@ function StatPill({ label, value }: { label: string; value: string }) {
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">{label}</p>
         </div>
     );
+}
+
+function MiniSummaryCard({
+    label,
+    value,
+    note,
+    current,
+    target,
+    color,
+    children,
+}: {
+    label: string;
+    value: string;
+    note: string;
+    current: number;
+    target: number;
+    color: string;
+    children: ReactNode;
+}) {
+    return (
+        <article className="surface rounded-lg p-4">
+            <div className="flex items-start gap-3">
+                <CircularProgress value={current} max={target} size={80} strokeWidth={8} color={color}>
+                    <p className="text-sm font-black text-ink">{Math.min(calcPercentage(current, target), 100)}%</p>
+                </CircularProgress>
+                <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-muted">{label}</p>
+                    <p className="mt-1 text-xl font-black text-ink">{value}</p>
+                    <p className="mt-1 text-xs font-semibold text-muted">{note}</p>
+                </div>
+            </div>
+            <div className="mt-4">{children}</div>
+        </article>
+    );
+}
+
+function QuickButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className="tap-scale rounded-lg border border-line bg-white px-2 py-2 text-ink-soft"
+        >
+            {children}
+        </button>
+    );
+}
+
+function formatCount(value: number) {
+    return new Intl.NumberFormat('en-IN').format(value);
 }

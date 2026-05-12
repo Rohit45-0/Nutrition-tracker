@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Pool, type QueryResultRow } from 'pg';
-import { DayLog, MealEntry, NutritionInfo, UserProfile, AuthUser, AppBootstrap, WorkoutEntry, WeightEntry } from './types';
-import { sumNutrition } from './nutrition';
+import { AppBootstrap, AuthUser, DayLog, HabitLog, MealEntry, NutritionInfo, StepEntry, UserProfile, WorkoutEntry, WeightEntry } from './types';
+import { buildDailyHabitBlueprints, sumNutrition } from './nutrition';
 
 const scrypt = promisify(scryptCallback);
 
@@ -16,6 +16,12 @@ const ZERO_NUTRITION: NutritionInfo = {
     fat: 0,
     fiber: 0,
 };
+const DEFAULT_DIETARY_PREFERENCE: UserProfile['dietaryPreference'] = 'vegetarian';
+const DEFAULT_INDIAN_FOOD_PREFERENCE: UserProfile['indianFoodPreference'] = 'mixed';
+const DEFAULT_STEP_GOAL = 8000;
+const DEFAULT_WATER_GOAL = 8;
+const DEFAULT_WEEKLY_WORKOUT_GOAL = 4;
+const DEFAULT_REMINDER_TIME = '08:00';
 
 type DbUserRow = QueryResultRow & {
     id: string;
@@ -34,6 +40,14 @@ type DbProfileRow = QueryResultRow & {
     gender: UserProfile['gender'];
     goal: UserProfile['goal'];
     activity_level: UserProfile['activityLevel'];
+    dietary_preference: UserProfile['dietaryPreference'] | null;
+    indian_food_preference: UserProfile['indianFoodPreference'] | null;
+    disliked_foods: string[] | null;
+    daily_step_goal: number | null;
+    daily_water_goal: number | null;
+    weekly_workout_goal: number | null;
+    reminders_enabled: boolean | null;
+    reminder_time: string | null;
     created_at: Date | string;
 };
 
@@ -44,6 +58,34 @@ type DbDayLogRow = QueryResultRow & {
     water_glasses: number;
     meals: MealEntry[] | string;
     total_nutrition: NutritionInfo | string;
+};
+
+type DbMealLogRow = QueryResultRow & {
+    id: string;
+    user_id: string;
+    date: Date | string;
+    meal_type: MealEntry['mealType'];
+    logged_at: Date | string;
+    total_nutrition: NutritionInfo | string;
+    created_at: Date | string;
+};
+
+type DbMealItemRow = QueryResultRow & {
+    id: string;
+    meal_log_id: string;
+    item_order: number;
+    name: string;
+    quantity: string;
+    nutrition: NutritionInfo | string;
+};
+
+type DbHydrationLogRow = QueryResultRow & {
+    id: string;
+    user_id: string;
+    date: Date | string;
+    glasses: number;
+    goal: number;
+    created_at: Date | string;
 };
 
 type DbWorkoutRow = QueryResultRow & {
@@ -64,6 +106,27 @@ type DbWeightLogRow = QueryResultRow & {
     date: Date | string;
     weight_kg: number | string;
     notes: string | null;
+    created_at: Date | string;
+};
+
+type DbStepLogRow = QueryResultRow & {
+    id: string;
+    user_id: string;
+    date: Date | string;
+    steps: number;
+    goal: number;
+    source: StepEntry['source'];
+    created_at: Date | string;
+};
+
+type DbHabitLogRow = QueryResultRow & {
+    id: string;
+    user_id: string;
+    date: Date | string;
+    name: string;
+    category: HabitLog['category'];
+    completed: boolean;
+    slot: number;
     created_at: Date | string;
 };
 
@@ -138,9 +201,57 @@ export async function ensureDatabaseReady() {
                     gender TEXT NOT NULL CHECK (gender IN ('male', 'female')),
                     goal TEXT NOT NULL CHECK (goal IN ('muscle_building', 'weight_loss', 'maintain')),
                     activity_level TEXT NOT NULL CHECK (activity_level IN ('sedentary', 'light', 'moderate', 'active', 'very_active')),
+                    dietary_preference TEXT NOT NULL DEFAULT 'vegetarian' CHECK (dietary_preference IN ('vegetarian', 'eggetarian', 'non_vegetarian', 'vegan')),
+                    indian_food_preference TEXT NOT NULL DEFAULT 'mixed' CHECK (indian_food_preference IN ('north_indian', 'south_indian', 'mixed', 'any')),
+                    disliked_foods TEXT[] NOT NULL DEFAULT '{}'::text[],
+                    daily_step_goal INTEGER NOT NULL DEFAULT 8000,
+                    daily_water_goal INTEGER NOT NULL DEFAULT 8,
+                    weekly_workout_goal INTEGER NOT NULL DEFAULT 4,
+                    reminders_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                    reminder_time TEXT NOT NULL DEFAULT '08:00',
                     created_at TIMESTAMPTZ NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS dietary_preference TEXT NOT NULL DEFAULT 'vegetarian';
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS indian_food_preference TEXT NOT NULL DEFAULT 'mixed';
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS disliked_foods TEXT[] NOT NULL DEFAULT '{}'::text[];
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS daily_step_goal INTEGER NOT NULL DEFAULT 8000;
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS daily_water_goal INTEGER NOT NULL DEFAULT 8;
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS weekly_workout_goal INTEGER NOT NULL DEFAULT 4;
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS reminders_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+            `);
+
+            await pool.query(`
+                ALTER TABLE profiles
+                ADD COLUMN IF NOT EXISTS reminder_time TEXT NOT NULL DEFAULT '08:00';
             `);
 
             await pool.query(`
@@ -170,6 +281,58 @@ export async function ensureDatabaseReady() {
             await pool.query(`
                 CREATE INDEX IF NOT EXISTS idx_day_logs_user_date
                 ON day_logs (user_id, date DESC);
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS meal_logs (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    meal_type TEXT NOT NULL CHECK (meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
+                    logged_at TIMESTAMPTZ NOT NULL,
+                    total_nutrition JSONB NOT NULL DEFAULT '{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0}'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_meal_logs_user_date
+                ON meal_logs (user_id, date DESC, logged_at ASC);
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS meal_items (
+                    id TEXT PRIMARY KEY,
+                    meal_log_id TEXT NOT NULL REFERENCES meal_logs(id) ON DELETE CASCADE,
+                    item_order INTEGER NOT NULL DEFAULT 0,
+                    name TEXT NOT NULL,
+                    quantity TEXT NOT NULL,
+                    nutrition JSONB NOT NULL DEFAULT '{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0}'::jsonb
+                );
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_meal_items_meal_order
+                ON meal_items (meal_log_id, item_order ASC);
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS hydration_logs (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    glasses INTEGER NOT NULL DEFAULT 0,
+                    goal INTEGER NOT NULL DEFAULT 8,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (user_id, date)
+                );
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_hydration_logs_user_date
+                ON hydration_logs (user_id, date DESC);
             `);
 
             await pool.query(`
@@ -213,6 +376,45 @@ export async function ensureDatabaseReady() {
             await pool.query(`
                 CREATE INDEX IF NOT EXISTS idx_weight_logs_user_date
                 ON weight_logs (user_id, date DESC);
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS step_logs (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    steps INTEGER NOT NULL DEFAULT 0,
+                    goal INTEGER NOT NULL DEFAULT 8000,
+                    source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'device', 'imported')),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (user_id, date)
+                );
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_step_logs_user_date
+                ON step_logs (user_id, date DESC);
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS habit_logs (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    name TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('nutrition', 'hydration', 'movement', 'recovery')),
+                    completed BOOLEAN NOT NULL DEFAULT FALSE,
+                    slot INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (user_id, date, slot)
+                );
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_habit_logs_user_date
+                ON habit_logs (user_id, date DESC, slot ASC);
             `);
         })().catch((error) => {
             globalThis.nutritrackSetupPromise = undefined;
@@ -292,6 +494,28 @@ function parseExercises(value: WorkoutEntry['exercises'] | string) {
     return Array.isArray(value) ? value : [];
 }
 
+function parseTextArray(value: string[] | string | null | undefined) {
+    if (Array.isArray(value)) {
+        return value.filter((item) => typeof item === 'string' && item.trim().length > 0);
+    }
+
+    if (typeof value === 'string') {
+        return value
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+    }
+
+    return [];
+}
+
+function normalizeDislikedFoods(items: string[]) {
+    return items
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 12);
+}
+
 function rowToAuthUser(row: DbUserRow): AuthUser {
     return {
         id: row.id,
@@ -310,6 +534,14 @@ function profileRowsToUserProfile(user: AuthUser, row: DbProfileRow): UserProfil
         gender: row.gender,
         goal: row.goal,
         activityLevel: row.activity_level,
+        dietaryPreference: row.dietary_preference ?? DEFAULT_DIETARY_PREFERENCE,
+        indianFoodPreference: row.indian_food_preference ?? DEFAULT_INDIAN_FOOD_PREFERENCE,
+        dislikedFoods: parseTextArray(row.disliked_foods),
+        dailyStepGoal: Number(row.daily_step_goal ?? DEFAULT_STEP_GOAL),
+        dailyWaterGoal: Number(row.daily_water_goal ?? DEFAULT_WATER_GOAL),
+        weeklyWorkoutGoal: Number(row.weekly_workout_goal ?? DEFAULT_WEEKLY_WORKOUT_GOAL),
+        remindersEnabled: Boolean(row.reminders_enabled),
+        reminderTime: row.reminder_time ?? DEFAULT_REMINDER_TIME,
         createdAt: new Date(row.created_at).toISOString(),
     };
 }
@@ -341,6 +573,50 @@ function rowToWeightEntry(row: DbWeightLogRow): WeightEntry {
         date: normalizeDateValue(row.date),
         weightKg: Number(row.weight_kg),
         notes: row.notes ?? '',
+    };
+}
+
+function rowToStepEntry(row: DbStepLogRow): StepEntry {
+    return {
+        date: normalizeDateValue(row.date),
+        steps: Number(row.steps),
+        goal: Number(row.goal),
+        source: row.source,
+    };
+}
+
+function rowToHabitLog(row: DbHabitLogRow): HabitLog {
+    return {
+        id: row.id,
+        date: normalizeDateValue(row.date),
+        name: row.name,
+        category: row.category,
+        completed: Boolean(row.completed),
+        slot: Number(row.slot),
+    };
+}
+
+function rowToMealEntry(row: DbMealLogRow, items: DbMealItemRow[]): MealEntry {
+    return {
+        id: row.id,
+        mealType: row.meal_type,
+        timestamp: new Date(row.logged_at).toISOString(),
+        totalNutrition: parseNutrition(row.total_nutrition),
+        items: items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            nutrition: parseNutrition(item.nutrition),
+        })),
+    };
+}
+
+function createEmptyStepEntry(date: string, goal = DEFAULT_STEP_GOAL): StepEntry {
+    return {
+        date,
+        steps: 0,
+        goal,
+        source: 'manual',
     };
 }
 
@@ -604,7 +880,23 @@ export async function getUserProfile(userId: string) {
         getUserById(userId),
         pool.query<DbProfileRow>(
             `
-                SELECT user_id, weight, height, age, gender, goal, activity_level, created_at
+                SELECT
+                    user_id,
+                    weight,
+                    height,
+                    age,
+                    gender,
+                    goal,
+                    activity_level,
+                    dietary_preference,
+                    indian_food_preference,
+                    disliked_foods,
+                    daily_step_goal,
+                    daily_water_goal,
+                    weekly_workout_goal,
+                    reminders_enabled,
+                    reminder_time,
+                    created_at
                 FROM profiles
                 WHERE user_id = $1
                 LIMIT 1;
@@ -624,6 +916,7 @@ export async function saveUserProfile(userId: string, profile: UserProfile) {
     await ensureDatabaseReady();
     const pool = getPool();
     const createdAt = profile.createdAt || new Date().toISOString();
+    const dislikedFoods = normalizeDislikedFoods(profile.dislikedFoods);
 
     await pool.query(
         `
@@ -644,10 +937,18 @@ export async function saveUserProfile(userId: string, profile: UserProfile) {
                 gender,
                 goal,
                 activity_level,
+                dietary_preference,
+                indian_food_preference,
+                disliked_foods,
+                daily_step_goal,
+                daily_water_goal,
+                weekly_workout_goal,
+                reminders_enabled,
+                reminder_time,
                 created_at,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
             ON CONFLICT (user_id)
             DO UPDATE SET
                 weight = EXCLUDED.weight,
@@ -656,6 +957,14 @@ export async function saveUserProfile(userId: string, profile: UserProfile) {
                 gender = EXCLUDED.gender,
                 goal = EXCLUDED.goal,
                 activity_level = EXCLUDED.activity_level,
+                dietary_preference = EXCLUDED.dietary_preference,
+                indian_food_preference = EXCLUDED.indian_food_preference,
+                disliked_foods = EXCLUDED.disliked_foods,
+                daily_step_goal = EXCLUDED.daily_step_goal,
+                daily_water_goal = EXCLUDED.daily_water_goal,
+                weekly_workout_goal = EXCLUDED.weekly_workout_goal,
+                reminders_enabled = EXCLUDED.reminders_enabled,
+                reminder_time = EXCLUDED.reminder_time,
                 updated_at = NOW();
         `,
         [
@@ -666,6 +975,14 @@ export async function saveUserProfile(userId: string, profile: UserProfile) {
             profile.gender,
             profile.goal,
             profile.activityLevel,
+            profile.dietaryPreference,
+            profile.indianFoodPreference,
+            dislikedFoods,
+            profile.dailyStepGoal,
+            profile.dailyWaterGoal,
+            profile.weeklyWorkoutGoal,
+            profile.remindersEnabled,
+            profile.reminderTime,
             createdAt,
         ]
     );
@@ -673,21 +990,458 @@ export async function saveUserProfile(userId: string, profile: UserProfile) {
     return getUserProfile(userId);
 }
 
-async function getStoredDayLog(userId: string, date: string) {
+function getWeekStartDate(date: string) {
+    const value = new Date(`${date}T00:00:00`);
+    const weekday = (value.getDay() + 6) % 7;
+    value.setDate(value.getDate() - weekday);
+    return value.toISOString().slice(0, 10);
+}
+
+async function getHydrationGlassesForUser(userId: string, date: string) {
     await ensureDatabaseReady();
     const pool = getPool();
-    const result = await pool.query<DbDayLogRow>(
+    const result = await pool.query<DbHydrationLogRow>(
         `
-            SELECT id, user_id, date, water_glasses, meals, total_nutrition
-            FROM day_logs
+            SELECT id, user_id, date, glasses, goal, created_at
+            FROM hydration_logs
             WHERE user_id = $1 AND date = $2
             LIMIT 1;
         `,
         [userId, date]
     );
 
+    return result.rows[0] ? Number(result.rows[0].glasses) : null;
+}
+
+async function saveHydrationForUser(userId: string, date: string, glasses: number, goal: number) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const existing = await pool.query<{ id: string }>(
+        `
+            SELECT id
+            FROM hydration_logs
+            WHERE user_id = $1 AND date = $2
+            LIMIT 1;
+        `,
+        [userId, date]
+    );
+    const id = existing.rows[0]?.id ?? randomUUID();
+
+    await pool.query(
+        `
+            INSERT INTO hydration_logs (
+                id,
+                user_id,
+                date,
+                glasses,
+                goal,
+                created_at,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+            ON CONFLICT (user_id, date)
+            DO UPDATE SET
+                glasses = EXCLUDED.glasses,
+                goal = EXCLUDED.goal,
+                updated_at = NOW();
+        `,
+        [id, userId, date, glasses, goal]
+    );
+}
+
+async function getMealEntriesForDate(userId: string, date: string) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const mealResult = await pool.query<DbMealLogRow>(
+        `
+            SELECT id, user_id, date, meal_type, logged_at, total_nutrition, created_at
+            FROM meal_logs
+            WHERE user_id = $1 AND date = $2
+            ORDER BY logged_at ASC, created_at ASC;
+        `,
+        [userId, date]
+    );
+
+    if (mealResult.rows.length === 0) {
+        return [];
+    }
+
+    const mealIds = mealResult.rows.map((row) => row.id);
+    const itemResult = await pool.query<DbMealItemRow>(
+        `
+            SELECT id, meal_log_id, item_order, name, quantity, nutrition
+            FROM meal_items
+            WHERE meal_log_id = ANY($1::text[])
+            ORDER BY meal_log_id ASC, item_order ASC;
+        `,
+        [mealIds]
+    );
+
+    const itemsByMeal = new Map<string, DbMealItemRow[]>();
+
+    for (const row of itemResult.rows) {
+        const list = itemsByMeal.get(row.meal_log_id) ?? [];
+        list.push(row);
+        itemsByMeal.set(row.meal_log_id, list);
+    }
+
+    return mealResult.rows.map((row) => rowToMealEntry(row, itemsByMeal.get(row.id) ?? []));
+}
+
+async function replaceMealsForDate(userId: string, date: string, meals: MealEntry[]) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        await client.query(
+            `
+                DELETE FROM meal_logs
+                WHERE user_id = $1 AND date = $2;
+            `,
+            [userId, date]
+        );
+
+        for (const meal of meals) {
+            const mealId = meal.id || randomUUID();
+            await client.query(
+                `
+                    INSERT INTO meal_logs (
+                        id,
+                        user_id,
+                        date,
+                        meal_type,
+                        logged_at,
+                        total_nutrition,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW());
+                `,
+                [
+                    mealId,
+                    userId,
+                    date,
+                    meal.mealType,
+                    meal.timestamp,
+                    JSON.stringify(meal.totalNutrition),
+                ]
+            );
+
+            for (const [index, item] of meal.items.entries()) {
+                await client.query(
+                    `
+                        INSERT INTO meal_items (
+                            id,
+                            meal_log_id,
+                            item_order,
+                            name,
+                            quantity,
+                            nutrition
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6::jsonb);
+                    `,
+                    [
+                        item.id || randomUUID(),
+                        mealId,
+                        index,
+                        item.name,
+                        item.quantity,
+                        JSON.stringify(item.nutrition),
+                    ]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getStepEntryForUser(userId: string, date: string, syncGoalWithProfile = false) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const [profile, result] = await Promise.all([
+        getUserProfile(userId),
+        pool.query<DbStepLogRow>(
+            `
+                SELECT id, user_id, date, steps, goal, source, created_at
+                FROM step_logs
+                WHERE user_id = $1 AND date = $2
+                LIMIT 1;
+            `,
+            [userId, date]
+        ),
+    ]);
+
+    const goal = profile?.dailyStepGoal ?? DEFAULT_STEP_GOAL;
     const row = result.rows[0];
-    return row ? rowToDayLog(row) : null;
+
+    if (!row) {
+        return createEmptyStepEntry(date, goal);
+    }
+
+    if (syncGoalWithProfile && Number(row.goal) !== goal) {
+        await pool.query(
+            `
+                UPDATE step_logs
+                SET goal = $3, updated_at = NOW()
+                WHERE user_id = $1 AND date = $2;
+            `,
+            [userId, date, goal]
+        );
+
+        return {
+            ...rowToStepEntry(row),
+            goal,
+        };
+    }
+
+    return rowToStepEntry(row);
+}
+
+export async function saveStepEntryForUser(userId: string, date: string, steps: number) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const [profile, existing] = await Promise.all([
+        getUserProfile(userId),
+        pool.query<{ id: string }>(
+            `
+                SELECT id
+                FROM step_logs
+                WHERE user_id = $1 AND date = $2
+                LIMIT 1;
+            `,
+            [userId, date]
+        ),
+    ]);
+    const id = existing.rows[0]?.id ?? randomUUID();
+    const goal = profile?.dailyStepGoal ?? DEFAULT_STEP_GOAL;
+    const result = await pool.query<DbStepLogRow>(
+        `
+            INSERT INTO step_logs (
+                id,
+                user_id,
+                date,
+                steps,
+                goal,
+                source,
+                created_at,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, 'manual', NOW(), NOW())
+            ON CONFLICT (user_id, date)
+            DO UPDATE SET
+                steps = EXCLUDED.steps,
+                goal = EXCLUDED.goal,
+                source = EXCLUDED.source,
+                updated_at = NOW()
+            RETURNING id, user_id, date, steps, goal, source, created_at;
+        `,
+        [id, userId, date, steps, goal]
+    );
+
+    return rowToStepEntry(result.rows[0]);
+}
+
+function createDefaultHabitLogs(date: string, profile: UserProfile): HabitLog[] {
+    return buildDailyHabitBlueprints(profile).map((habit, slot) => ({
+        id: randomUUID(),
+        date,
+        name: habit.name,
+        category: habit.category,
+        completed: false,
+        slot,
+    }));
+}
+
+export async function getHabitsForUser(userId: string, date: string) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const result = await pool.query<DbHabitLogRow>(
+        `
+            SELECT id, user_id, date, name, category, completed, slot, created_at
+            FROM habit_logs
+            WHERE user_id = $1 AND date = $2
+            ORDER BY slot ASC, created_at ASC;
+        `,
+        [userId, date]
+    );
+
+    if (result.rows.length > 0) {
+        return result.rows.map(rowToHabitLog);
+    }
+
+    const profile = await getUserProfile(userId);
+    if (!profile) {
+        return [];
+    }
+
+    const defaults = createDefaultHabitLogs(date, profile);
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        for (const habit of defaults) {
+            await client.query(
+                `
+                    INSERT INTO habit_logs (
+                        id,
+                        user_id,
+                        date,
+                        name,
+                        category,
+                        completed,
+                        slot,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+                    ON CONFLICT (user_id, date, slot)
+                    DO NOTHING;
+                `,
+                [habit.id, userId, date, habit.name, habit.category, habit.completed, habit.slot]
+            );
+        }
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+
+    return defaults;
+}
+
+export async function saveHabitsForUser(userId: string, date: string, habits: HabitLog[]) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const normalizedHabits = habits
+        .slice()
+        .sort((a, b) => a.slot - b.slot)
+        .map((habit, index) => ({
+            id: habit.id || randomUUID(),
+            date,
+            name: habit.name.trim(),
+            category: habit.category,
+            completed: Boolean(habit.completed),
+            slot: index,
+        }))
+        .filter((habit) => habit.name.length > 0)
+        .slice(0, 6);
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        await client.query(
+            `
+                DELETE FROM habit_logs
+                WHERE user_id = $1 AND date = $2;
+            `,
+            [userId, date]
+        );
+
+        for (const habit of normalizedHabits) {
+            await client.query(
+                `
+                    INSERT INTO habit_logs (
+                        id,
+                        user_id,
+                        date,
+                        name,
+                        category,
+                        completed,
+                        slot,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW());
+                `,
+                [habit.id, userId, date, habit.name, habit.category, habit.completed, habit.slot]
+            );
+        }
+
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+
+    return normalizedHabits;
+}
+
+export async function getWorkoutSummaryForUser(userId: string, date: string, weeklyGoal: number) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const weekStart = getWeekStartDate(date);
+    const result = await pool.query<{
+        today_count: number;
+        today_minutes: number;
+        week_count: number;
+    }>(
+        `
+            SELECT
+                COUNT(*) FILTER (WHERE date = $2)::int AS today_count,
+                COALESCE(SUM(duration_minutes) FILTER (WHERE date = $2), 0)::int AS today_minutes,
+                COUNT(*) FILTER (WHERE date >= $3 AND date <= $2)::int AS week_count
+            FROM workouts
+            WHERE user_id = $1
+              AND date >= $3
+              AND date <= $2;
+        `,
+        [userId, date, weekStart]
+    );
+
+    const row = result.rows[0];
+    return {
+        date,
+        todayCount: Number(row?.today_count ?? 0),
+        todayMinutes: Number(row?.today_minutes ?? 0),
+        weekCount: Number(row?.week_count ?? 0),
+        weeklyGoal,
+    };
+}
+
+async function getStoredDayLog(userId: string, date: string) {
+    await ensureDatabaseReady();
+    const pool = getPool();
+    const [legacyResult, normalizedMeals, hydrationGlasses] = await Promise.all([
+        pool.query<DbDayLogRow>(
+            `
+                SELECT id, user_id, date, water_glasses, meals, total_nutrition
+                FROM day_logs
+                WHERE user_id = $1 AND date = $2
+                LIMIT 1;
+            `,
+            [userId, date]
+        ),
+        getMealEntriesForDate(userId, date),
+        getHydrationGlassesForUser(userId, date),
+    ]);
+
+    const legacy = legacyResult.rows[0] ? rowToDayLog(legacyResult.rows[0]) : null;
+    const meals = normalizedMeals.length > 0 ? normalizedMeals : legacy?.meals ?? [];
+    const waterGlasses = hydrationGlasses ?? legacy?.waterGlasses ?? 0;
+
+    if (!legacy && meals.length === 0 && waterGlasses === 0) {
+        return null;
+    }
+
+    return {
+        date,
+        meals,
+        totalNutrition: meals.length > 0 ? sumNutrition(meals.flatMap((meal) => meal.items)) : legacy?.totalNutrition ?? { ...ZERO_NUTRITION },
+        waterGlasses,
+    };
 }
 
 export async function getTodayLogForUser(userId: string, date: string) {
@@ -795,6 +1549,7 @@ export async function addMealForUser(userId: string, date: string, meal: MealEnt
     const todayLog = await getTodayLogForUser(userId, date);
     const meals = [...todayLog.meals, meal];
     const allItems = meals.flatMap((entry) => entry.items);
+    await replaceMealsForDate(userId, date, meals);
     const savedLog = await saveDayLog(userId, {
         ...todayLog,
         meals,
@@ -811,6 +1566,7 @@ export async function deleteMealForUser(userId: string, date: string, mealId: st
     const todayLog = await getTodayLogForUser(userId, date);
     const meals = todayLog.meals.filter((meal) => meal.id !== mealId);
     const allItems = meals.flatMap((entry) => entry.items);
+    await replaceMealsForDate(userId, date, meals);
     const savedLog = await saveDayLog(userId, {
         ...todayLog,
         meals,
@@ -845,6 +1601,7 @@ export async function updateMealForUser(userId: string, date: string, mealId: st
     }
 
     const allItems = meals.flatMap((entry) => entry.items);
+    await replaceMealsForDate(userId, date, meals);
     const savedLog = await saveDayLog(userId, {
         ...todayLog,
         meals,
@@ -859,6 +1616,8 @@ export async function updateMealForUser(userId: string, date: string, mealId: st
 
 export async function updateWaterForUser(userId: string, date: string, waterGlasses: number) {
     const todayLog = await getTodayLogForUser(userId, date);
+    const profile = await getUserProfile(userId);
+    await saveHydrationForUser(userId, date, waterGlasses, profile?.dailyWaterGoal ?? DEFAULT_WATER_GOAL);
     const savedLog = await saveDayLog(userId, {
         ...todayLog,
         waterGlasses,
@@ -1028,14 +1787,40 @@ export async function buildBootstrapForUser(userId: string, date: string, days: 
             todayLog: null,
             recentLogs: [],
             totalDays: 0,
+            todaySteps: null,
+            todayHabits: [],
+            todayWorkoutSummary: null,
         };
     }
+
+    if (!profile) {
+        return {
+            user,
+            profile: null,
+            todayLog: null,
+            recentLogs,
+            totalDays,
+            todaySteps: null,
+            todayHabits: [],
+            todayWorkoutSummary: null,
+        };
+    }
+
+    const [todayLog, todaySteps, todayHabits, todayWorkoutSummary] = await Promise.all([
+        getTodayLogForUser(userId, date),
+        getStepEntryForUser(userId, date, true),
+        getHabitsForUser(userId, date),
+        getWorkoutSummaryForUser(userId, date, profile.weeklyWorkoutGoal),
+    ]);
 
     return {
         user,
         profile,
-        todayLog: profile ? await getTodayLogForUser(userId, date) : null,
+        todayLog,
         recentLogs,
         totalDays,
+        todaySteps,
+        todayHabits,
+        todayWorkoutSummary,
     };
 }

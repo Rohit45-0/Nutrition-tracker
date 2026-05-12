@@ -1,7 +1,7 @@
 'use client';
 
 import { UserProfile, DailyTargets } from '@/lib/types';
-import { getGoalLabel } from '@/lib/nutrition';
+import { buildDietPlanSummary, buildWorkoutPlanSummary, getDietaryPreferenceLabel, getGoalLabel, getIndianFoodPreferenceLabel, getReminderSummary } from '@/lib/nutrition';
 
 interface Props {
     profile: UserProfile;
@@ -19,13 +19,15 @@ export default function Settings({ profile, userEmail, targets, onEditProfile, o
         .join('')
         .slice(0, 2)
         .toUpperCase() || 'NT';
+    const dietPlan = buildDietPlanSummary(profile, targets);
+    const workoutPlan = buildWorkoutPlanSummary(profile);
 
     return (
         <div className="screen space-y-5">
             <header className="animate-rise-in">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-strong">Profile</p>
                 <h1 className="ink-title mt-1 text-4xl font-black leading-none text-ink">Your setup</h1>
-                <p className="mt-2 text-sm font-bold text-muted">Targets, body stats, and food guidance.</p>
+                <p className="mt-2 text-sm font-bold text-muted">Targets, body stats, food style, and reminders.</p>
             </header>
 
             <section className="surface animate-rise-in rounded-lg p-4" style={{ animationDelay: '70ms' }}>
@@ -82,6 +84,37 @@ export default function Settings({ profile, userEmail, targets, onEditProfile, o
                 </div>
             </section>
 
+            <section className="surface animate-rise-in rounded-lg p-4" style={{ animationDelay: '145ms' }}>
+                <div className="mb-4 flex items-baseline justify-between gap-3">
+                    <div>
+                        <h2 className="text-lg font-black text-ink">Food style</h2>
+                        <p className="text-sm font-semibold text-muted">The Indian meal pattern your plan should lean toward.</p>
+                    </div>
+                    <span className="rounded-lg bg-brand-soft px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-brand-strong">
+                        {getDietaryPreferenceLabel(profile.dietaryPreference)}
+                    </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <ProfileMetric label="Cuisine" value={getIndianFoodPreferenceLabel(profile.indianFoodPreference)} />
+                    <ProfileMetric label="Steps" value={`${profile.dailyStepGoal} / day`} />
+                    <ProfileMetric label="Water" value={`${profile.dailyWaterGoal} glasses`} />
+                    <ProfileMetric label="Workouts" value={`${profile.weeklyWorkoutGoal} / week`} />
+                </div>
+
+                <div className="mt-4 rounded-lg border border-line bg-white px-3 py-3">
+                    <p className="text-[11px] font-black uppercase tracking-[0.12em] text-muted">Avoided foods</p>
+                    <p className="mt-1 text-sm font-bold text-ink-soft">
+                        {profile.dislikedFoods.length > 0 ? profile.dislikedFoods.join(', ') : 'No exclusions saved yet.'}
+                    </p>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-line bg-white px-3 py-3">
+                    <p className="text-[11px] font-black uppercase tracking-[0.12em] text-muted">Reminder</p>
+                    <p className="mt-1 text-sm font-bold text-ink-soft">{getReminderSummary(profile)}</p>
+                </div>
+            </section>
+
             <section className="surface-quiet animate-rise-in rounded-lg p-4" style={{ animationDelay: '170ms' }}>
                 <h2 className="text-lg font-black text-ink">How targets work</h2>
                 <div className="mt-3 space-y-3 text-sm font-semibold text-ink-soft">
@@ -94,27 +127,20 @@ export default function Settings({ profile, userEmail, targets, onEditProfile, o
             </section>
 
             <section className="surface-quiet animate-rise-in rounded-lg p-4" style={{ animationDelay: '220ms' }}>
-                <h2 className="text-lg font-black text-ink">Indian plate notes</h2>
+                <h2 className="text-lg font-black text-ink">Diet plan</h2>
                 <div className="mt-3 space-y-3 text-sm font-semibold text-ink-soft">
-                    {profile.goal === 'muscle_building' ? (
-                        <>
-                            <p>Pair roti or rice with dal, paneer, eggs, chicken, or fish instead of letting carbs stand alone.</p>
-                            <p>Keep a quick protein option ready: whey, roasted chana, sprouts, curd, or boiled eggs.</p>
-                            <p>Add vegetables to volume-heavy meals so the surplus stays useful.</p>
-                        </>
-                    ) : profile.goal === 'weight_loss' ? (
-                        <>
-                            <p>Build the plate around dal, curd, eggs, paneer, chicken, or fish before adding rice or roti.</p>
-                            <p>Use smaller portions of fried snacks, sweets, sweet chai, naan, and paratha.</p>
-                            <p>Choose filling sides: salad, sabzi, buttermilk, fruit, sprouts, or clear soup.</p>
-                        </>
-                    ) : (
-                        <>
-                            <p>Keep a balanced thali rhythm: protein, vegetables, carbs, curd, and water.</p>
-                            <p>Use seasonal fruits and simple snacks to avoid random grazing.</p>
-                            <p>Watch portions on restaurant meals, especially oil-heavy gravies and biryani.</p>
-                        </>
-                    )}
+                    {dietPlan.map((item) => (
+                        <p key={item}>{item}</p>
+                    ))}
+                </div>
+            </section>
+
+            <section className="surface-quiet animate-rise-in rounded-lg p-4" style={{ animationDelay: '245ms' }}>
+                <h2 className="text-lg font-black text-ink">Training rhythm</h2>
+                <div className="mt-3 space-y-3 text-sm font-semibold text-ink-soft">
+                    {workoutPlan.map((item) => (
+                        <p key={item}>{item}</p>
+                    ))}
                 </div>
             </section>
 

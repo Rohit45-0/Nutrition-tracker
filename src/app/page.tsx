@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppBootstrap, AuthUser, DayLog, DailyTargets, MealEntry, UserProfile, WorkoutEntry, WeightEntry } from '@/lib/types';
+import { AppBootstrap, AuthUser, DayLog, DailyTargets, HabitLog, MealEntry, StepEntry, UserProfile, WorkoutEntry, WorkoutSummary, WeightEntry } from '@/lib/types';
 import { calculateDailyTargets, getDayNumber, getTodayDate } from '@/lib/nutrition';
 import {
   addMealToLog,
+  saveHabits,
+  saveSteps,
   addWorkout,
   deleteMealFromLog,
   deleteWeightEntry,
@@ -44,6 +46,13 @@ function mergeTodayLogIntoRecentLogs(log: DayLog, previousLogs: DayLog[]) {
     .slice(0, 30);
 }
 
+function getWeekStart(date: string) {
+  const value = new Date(`${date}T00:00:00`);
+  const weekday = (value.getDay() + 6) % 7;
+  value.setDate(value.getDate() - weekday);
+  return value.toISOString().slice(0, 10);
+}
+
 export default function Home() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -58,6 +67,9 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [workouts, setWorkouts] = useState<WorkoutEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
+  const [todaySteps, setTodaySteps] = useState<StepEntry | null>(null);
+  const [todayHabits, setTodayHabits] = useState<HabitLog[]>([]);
+  const [todayWorkoutSummary, setTodayWorkoutSummary] = useState<WorkoutSummary | null>(null);
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [progressLoading, setProgressLoading] = useState(false);
 
@@ -67,6 +79,9 @@ export default function Home() {
     setTodayLog(bootstrap.todayLog);
     setRecentLogs(bootstrap.recentLogs);
     setTotalDays(bootstrap.totalDays);
+    setTodaySteps(bootstrap.todaySteps);
+    setTodayHabits(bootstrap.todayHabits);
+    setTodayWorkoutSummary(bootstrap.todayWorkoutSummary);
     setTargets(bootstrap.profile ? calculateDailyTargets(bootstrap.profile) : null);
 
     if (bootstrap.profile) {
@@ -88,6 +103,9 @@ export default function Home() {
         todayLog: null,
         recentLogs: [],
         totalDays: 0,
+        todaySteps: null,
+        todayHabits: [],
+        todayWorkoutSummary: null,
       });
     } finally {
       setIsLoading(false);
@@ -142,6 +160,9 @@ export default function Home() {
     }
 
     syncTodayState(result.todayLog, result.totalDays);
+    setTodaySteps(result.todaySteps);
+    setTodayHabits(result.todayHabits);
+    setTodayWorkoutSummary(result.todayWorkoutSummary);
     setShowSetup(false);
   }, [syncTodayState]);
 
@@ -199,6 +220,9 @@ export default function Home() {
     setShowAddMeal(false);
     setEditingMeal(null);
     setActiveTab('home');
+    setTodaySteps(null);
+    setTodayHabits([]);
+    setTodayWorkoutSummary(null);
     setWorkouts([]);
     setWeightEntries([]);
     setProgressLoaded(false);
@@ -209,12 +233,45 @@ export default function Home() {
     const result = await addWorkout(workout);
     setWorkouts((previous) => [result.workout, ...previous]);
     setProgressLoaded(true);
-  }, []);
+    if (workout.date === getTodayDate()) {
+      setTodayWorkoutSummary((previous) => {
+        const base = previous ?? {
+          date: getTodayDate(),
+          todayCount: 0,
+          todayMinutes: 0,
+          weekCount: 0,
+          weeklyGoal: profile?.weeklyWorkoutGoal ?? 4,
+        };
+
+        return {
+          ...base,
+          todayCount: base.todayCount + 1,
+          todayMinutes: base.todayMinutes + workout.durationMinutes,
+          weekCount: base.weekCount + 1,
+        };
+      });
+    }
+  }, [profile]);
 
   const handleDeleteWorkout = useCallback(async (workoutId: string) => {
+    const deletedWorkout = workouts.find((workout) => workout.id === workoutId);
     await deleteWorkout(workoutId);
     setWorkouts((previous) => previous.filter((workout) => workout.id !== workoutId));
-  }, []);
+    if (deletedWorkout && todayWorkoutSummary) {
+      const today = getTodayDate();
+      const weekStart = getWeekStart(today);
+
+      setTodayWorkoutSummary({
+        ...todayWorkoutSummary,
+        todayCount: deletedWorkout.date === today ? Math.max(todayWorkoutSummary.todayCount - 1, 0) : todayWorkoutSummary.todayCount,
+        todayMinutes: deletedWorkout.date === today ? Math.max(todayWorkoutSummary.todayMinutes - deletedWorkout.durationMinutes, 0) : todayWorkoutSummary.todayMinutes,
+        weekCount:
+          deletedWorkout.date >= weekStart && deletedWorkout.date <= today
+            ? Math.max(todayWorkoutSummary.weekCount - 1, 0)
+            : todayWorkoutSummary.weekCount,
+      });
+    }
+  }, [todayWorkoutSummary, workouts]);
 
   const handleAddWeight = useCallback(async (entry: Omit<WeightEntry, 'id'>) => {
     const result = await saveWeightEntry(entry);
@@ -229,6 +286,26 @@ export default function Home() {
     await deleteWeightEntry(entryId);
     setWeightEntries((previous) => previous.filter((entry) => entry.id !== entryId));
   }, []);
+
+  const handleUpdateSteps = useCallback(async (steps: number) => {
+    const result = await saveSteps(steps, getTodayDate());
+    setTodaySteps(result.entry);
+  }, []);
+
+  const handleToggleHabit = useCallback(async (habitId: string) => {
+    const updatedHabits = todayHabits.map((habit) => (
+      habit.id === habitId
+        ? { ...habit, completed: !habit.completed }
+        : habit
+    ));
+
+    if (updatedHabits.length === 0) {
+      return;
+    }
+
+    const result = await saveHabits(updatedHabits, getTodayDate());
+    setTodayHabits(result.habits);
+  }, [todayHabits]);
 
   const dayNumber = useMemo(() => {
     if (!profile) {
@@ -285,11 +362,28 @@ export default function Home() {
           todayLog={todayLog}
           targets={targets}
           dayNumber={dayNumber}
+          todaySteps={todaySteps ?? {
+            date: getTodayDate(),
+            steps: 0,
+            goal: profile.dailyStepGoal,
+            source: 'manual',
+          }}
+          todayHabits={todayHabits}
+          todayWorkoutSummary={todayWorkoutSummary ?? {
+            date: getTodayDate(),
+            todayCount: 0,
+            todayMinutes: 0,
+            weekCount: 0,
+            weeklyGoal: profile.weeklyWorkoutGoal,
+          }}
           onAddMeal={openAddMeal}
           onEditMeal={handleEditMeal}
           onDeleteMeal={handleDeleteMeal}
           onAddWater={handleAddWater}
           onRemoveWater={handleRemoveWater}
+          onUpdateSteps={handleUpdateSteps}
+          onToggleHabit={handleToggleHabit}
+          onOpenProgress={() => setActiveTab('progress')}
         />
       )}
 
